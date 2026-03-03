@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@agestra/core": "*",
-    "js-tiktoken": "^1.0.21",
-    "sql.js": "^1.11.0"
+    "fts5-sql-bundle": "^1.0.2",
+    "js-tiktoken": "^1.0.21"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
