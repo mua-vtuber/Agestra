@@ -144,12 +144,12 @@ describe("memory tools", () => {
       expect(result.content[0].text).toContain("nonexistent");
     });
 
-    it("should throw for missing query", async () => {
+    it("should return error for missing query", async () => {
       const deps: MemoryToolDeps = { memoryFacade: mockMemoryFacade() };
 
-      await expect(
-        handleTool("memory_search", {}, deps),
-      ).rejects.toThrow();
+      const result = await handleTool("memory_search", {}, deps);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory operation failed");
     });
 
     it("should display node details correctly", async () => {
@@ -251,12 +251,12 @@ describe("memory tools", () => {
       expect(result.content[0].text).toContain("**Errors:** 1");
     });
 
-    it("should throw for empty paths", async () => {
+    it("should return error for empty paths", async () => {
       const deps: MemoryToolDeps = { memoryFacade: mockMemoryFacade() };
 
-      await expect(
-        handleTool("memory_index", { paths: [] }, deps),
-      ).rejects.toThrow();
+      const result = await handleTool("memory_index", { paths: [] }, deps);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory operation failed");
     });
   });
 

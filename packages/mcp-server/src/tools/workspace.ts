@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ProviderRegistry, AIProvider } from "@agestra/core";
 import type { DocumentManager } from "@agestra/workspace";
+import type { SessionManager } from "@agestra/agents";
 
 // ── Zod schemas ──────────────────────────────────────────────
 
@@ -11,7 +12,14 @@ const WorkspaceCreateReviewSchema = z.object({
 
 const WorkspaceRequestReviewSchema = z.object({
   doc_id: z.string().describe("Document ID to request review for"),
-  provider: z.string().describe("Provider ID to perform the review"),
+  provider: z.union([
+    z.string(),
+    z.array(z.string()).min(1),
+  ]).describe("Provider ID(s) to perform the review"),
+});
+
+const WorkspaceReviewStatusSchema = z.object({
+  session_id: z.string().describe("Session ID returned by workspace_request_review"),
 });
 
 const WorkspaceAddCommentSchema = z.object({
@@ -29,6 +37,7 @@ const WorkspaceReadSchema = z.object({
 export interface WorkspaceToolDeps {
   registry: ProviderRegistry;
   documentManager: DocumentManager;
+  sessionManager: SessionManager;
 }
 
 interface McpToolResult {
@@ -64,14 +73,32 @@ export function getTools() {
     {
       name: "workspace_request_review",
       description:
-        "Request an AI provider to perform a code review on an existing review document.",
+        "Request AI provider(s) to perform a code review on an existing review document. Returns immediately with a session ID. Use workspace_review_status to check progress.",
       inputSchema: {
         type: "object" as const,
         properties: {
           doc_id: { type: "string", description: "Document ID to request review for" },
-          provider: { type: "string", description: "Provider ID to perform the review" },
+          provider: {
+            oneOf: [
+              { type: "string", description: "Single provider ID" },
+              { type: "array", items: { type: "string" }, description: "Multiple provider IDs" },
+            ],
+            description: "Provider ID(s) to perform the review",
+          },
         },
         required: ["doc_id", "provider"],
+      },
+    },
+    {
+      name: "workspace_review_status",
+      description:
+        "Check the status of an async review session started by workspace_request_review.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          session_id: { type: "string", description: "Session ID returned by workspace_request_review" },
+        },
+        required: ["session_id"],
       },
     },
     {
@@ -132,32 +159,134 @@ async function handleRequestReview(
 ): Promise<McpToolResult> {
   const parsed = WorkspaceRequestReviewSchema.parse(args);
 
-  // Validate provider exists
-  const provider = deps.registry.get(parsed.provider);
+  // Normalize provider to array
+  const providerIds = Array.isArray(parsed.provider)
+    ? parsed.provider
+    : [parsed.provider];
 
-  // Read the document
+  // Fail-fast: validate all providers exist
+  const providers: Array<{ id: string; provider: AIProvider }> = [];
+  for (const id of providerIds) {
+    const provider = deps.registry.get(id);
+    providers.push({ id, provider });
+  }
+
+  // Fail-fast: validate document exists
   const doc = await deps.documentManager.read(parsed.doc_id);
 
-  // Send to provider for review
-  const response = await provider.chat({
-    prompt: `Please review the following document and provide feedback:\n\n${doc.content}`,
-    system: "You are a code reviewer. Provide detailed, actionable feedback.",
+  // Create a session to track the async review
+  const session = deps.sessionManager.createSession("review", {
+    doc_id: parsed.doc_id,
+    providers: providerIds,
+    completed: [] as string[],
+    failed: [] as string[],
   });
 
-  // Add the review as a comment
-  await deps.documentManager.addComment(parsed.doc_id, {
-    author: `AI (${parsed.provider})`,
-    content: response.text,
+  deps.sessionManager.updateSessionStatus(session.id, "in_progress");
+
+  // Fire-and-forget: launch reviews in parallel
+  const reviewPromises = providers.map(async ({ id, provider }) => {
+    try {
+      const response = await provider.chat({
+        prompt: `Please review the following document and provide feedback:\n\n${doc.content}`,
+        system: "You are a code reviewer. Provide detailed, actionable feedback.",
+      });
+
+      await deps.documentManager.addComment(parsed.doc_id, {
+        author: `AI (${id})`,
+        content: response.text,
+      });
+
+      // Track completion
+      const current = deps.sessionManager.getSession(session.id);
+      if (current) {
+        const completed = (current.config.completed as string[]) || [];
+        completed.push(id);
+        current.config.completed = completed;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+
+      // Add error as comment so it's visible in the document
+      try {
+        await deps.documentManager.addComment(parsed.doc_id, {
+          author: `AI (${id})`,
+          content: `**Review failed:** ${msg}`,
+        });
+      } catch {
+        // Ignore comment write failure
+      }
+
+      // Track failure
+      const current = deps.sessionManager.getSession(session.id);
+      if (current) {
+        const failed = (current.config.failed as string[]) || [];
+        failed.push(id);
+        current.config.failed = failed;
+      }
+    }
+  });
+
+  // When all providers finish, mark the session complete
+  Promise.all(reviewPromises).then(() => {
+    try {
+      const current = deps.sessionManager.getSession(session.id);
+      const completed = (current?.config.completed as string[]) || [];
+      const failed = (current?.config.failed as string[]) || [];
+      const summary = `Completed: ${completed.join(", ") || "none"}. Failed: ${failed.join(", ") || "none"}.`;
+
+      if (failed.length === providerIds.length) {
+        deps.sessionManager.updateSessionStatus(session.id, "failed");
+      }
+      deps.sessionManager.completeSession(session.id, summary);
+    } catch {
+      // Best-effort session finalization
+    }
   });
 
   return {
     content: [
       {
         type: "text",
-        text: `**Review completed**\n**Document ID:** ${parsed.doc_id}\n**Reviewer:** ${parsed.provider}\n**Model:** ${response.model}\n\n${response.text}`,
+        text: `**Review started (async)**\n**Session ID:** ${session.id}\n**Document ID:** ${parsed.doc_id}\n**Providers:** ${providerIds.join(", ")}\n\nUse \`workspace_review_status\` with session_id to check progress.`,
       },
     ],
   };
+}
+
+async function handleReviewStatus(
+  args: unknown,
+  deps: WorkspaceToolDeps,
+): Promise<McpToolResult> {
+  const parsed = WorkspaceReviewStatusSchema.parse(args);
+
+  const session = deps.sessionManager.getSession(parsed.session_id);
+  if (!session) {
+    return {
+      content: [{ type: "text", text: `Session not found: ${parsed.session_id}` }],
+      isError: true,
+    };
+  }
+
+  const providers = (session.config.providers as string[]) || [];
+  const completed = (session.config.completed as string[]) || [];
+  const failed = (session.config.failed as string[]) || [];
+  const pending = providers.filter((p) => !completed.includes(p) && !failed.includes(p));
+
+  let text = `**Review Session Status**\n`;
+  text += `**Session ID:** ${session.id}\n`;
+  text += `**Status:** ${session.status}\n`;
+  text += `**Document:** ${session.config.doc_id}\n`;
+  text += `**Providers:** ${providers.join(", ")}\n\n`;
+  text += `- Completed: ${completed.join(", ") || "none"}\n`;
+  text += `- Failed: ${failed.join(", ") || "none"}\n`;
+  text += `- Pending: ${pending.join(", ") || "none"}\n`;
+
+  if (session.result) {
+    text += `\n**Result:** ${session.result}`;
+  }
+
+  return { content: [{ type: "text", text }] };
 }
 
 async function handleAddComment(
@@ -211,6 +340,8 @@ export async function handleTool(
       return handleCreateReview(args, deps);
     case "workspace_request_review":
       return handleRequestReview(args, deps);
+    case "workspace_review_status":
+      return handleReviewStatus(args, deps);
     case "workspace_add_comment":
       return handleAddComment(args, deps);
     case "workspace_read":

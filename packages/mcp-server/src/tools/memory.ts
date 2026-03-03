@@ -352,23 +352,49 @@ export async function handleTool(
   args: unknown,
   deps: MemoryToolDeps,
 ): Promise<McpToolResult> {
-  switch (name) {
-    case "memory_search":
-      return handleMemorySearch(args, deps);
-    case "memory_index":
-      return handleMemoryIndex(args, deps);
-    case "memory_store":
-      return handleMemoryStore(args, deps);
-    case "memory_dead_ends":
-      return handleMemoryDeadEnds(args, deps);
-    case "memory_context":
-      return handleMemoryContext(args, deps);
-    case "memory_add_edge":
-      return handleMemoryAddEdge(args, deps);
-    default:
-      return {
-        content: [{ type: "text", text: `Unknown tool: ${name}` }],
-        isError: true,
-      };
+  // Guard: check if memory system is initialized
+  if (!deps.memoryFacade.isInitialized) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: "Memory system is unavailable (not initialized). Memory operations cannot be performed in this session.",
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  try {
+    switch (name) {
+      case "memory_search":
+        return await handleMemorySearch(args, deps);
+      case "memory_index":
+        return await handleMemoryIndex(args, deps);
+      case "memory_store":
+        return await handleMemoryStore(args, deps);
+      case "memory_dead_ends":
+        return await handleMemoryDeadEnds(args, deps);
+      case "memory_context":
+        return await handleMemoryContext(args, deps);
+      case "memory_add_edge":
+        return await handleMemoryAddEdge(args, deps);
+      default:
+        return {
+          content: [{ type: "text", text: `Unknown tool: ${name}` }],
+          isError: true,
+        };
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Memory operation failed: ${message}`,
+        },
+      ],
+      isError: true,
+    };
   }
 }

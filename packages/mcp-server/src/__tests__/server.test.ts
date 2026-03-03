@@ -99,6 +99,7 @@ function mockDocumentManager(): DocumentManager {
 
 function mockMemoryFacade(): MemoryFacade {
   return {
+    isInitialized: true,
     search: vi.fn().mockResolvedValue([]),
     store: vi.fn(),
     getAssembledContext: vi.fn(),
@@ -136,9 +137,9 @@ function createDeps(
 
 describe("server", () => {
   describe("collectTools", () => {
-    it("should return exactly 28 tool definitions", () => {
+    it("should return exactly 29 tool definitions", () => {
       const tools = collectTools();
-      expect(tools).toHaveLength(28);
+      expect(tools).toHaveLength(29);
     });
 
     it("should have unique tool names", () => {

@@ -7,6 +7,7 @@ import type { JobDescriptor, JobStatus, JobResult, JobState } from "./job-types.
 
 const DEFAULT_TIMEOUT = 300_000; // 5 minutes
 const JOBS_DIR_NAME = ".agestra/.jobs";
+const STALE_THRESHOLD_MS = 30_000; // 30 seconds
 
 export interface JobManagerOptions {
   maxJobs?: number;
@@ -77,7 +78,33 @@ export class JobManager {
   getStatus(jobId: string): JobStatus | null {
     const statusPath = join(this.jobsDir, jobId, "status.json");
     if (!existsSync(statusPath)) return null;
-    return JSON.parse(readFileSync(statusPath, "utf-8")) as JobStatus;
+    const status = JSON.parse(readFileSync(statusPath, "utf-8")) as JobStatus;
+
+    // Detect stale queued jobs: queued for longer than threshold → mark as error
+    if (status.state === "queued") {
+      const descPath = join(this.jobsDir, jobId, "job.json");
+      try {
+        const descriptor = JSON.parse(readFileSync(descPath, "utf-8")) as JobDescriptor;
+        const elapsed = Date.now() - new Date(descriptor.createdAt).getTime();
+        if (elapsed > STALE_THRESHOLD_MS) {
+          const errorStatus: JobStatus = {
+            ...status,
+            state: "error",
+            completedAt: new Date().toISOString(),
+          };
+          atomicWriteJsonSync(statusPath, errorStatus);
+          atomicWriteSync(
+            join(this.jobsDir, jobId, "error.txt"),
+            "Job stalled in queued state (worker failed to start)",
+          );
+          return errorStatus;
+        }
+      } catch {
+        // If we can't read the descriptor, leave status as-is
+      }
+    }
+
+    return status;
   }
 
   getResult(jobId: string): JobResult | null {
@@ -201,10 +228,138 @@ export class JobManager {
 
   private spawnWorker(jobDir: string): void {
     const workerScript = new URL("./job-worker.js", import.meta.url).pathname;
-    const child = spawn(process.execPath, [workerScript, jobDir], {
-      detached: true,
-      stdio: "ignore",
+
+    if (existsSync(workerScript)) {
+      // Normal mode: spawn detached worker process
+      const child = spawn(process.execPath, [workerScript, jobDir], {
+        detached: true,
+        stdio: "ignore",
+      });
+
+      child.on("error", () => {
+        // Worker process failed to spawn — fall back to in-process execution
+        this.runInProcess(jobDir);
+      });
+
+      child.unref();
+    } else {
+      // Bundle mode: worker script not available as separate file
+      this.runInProcess(jobDir);
+    }
+  }
+
+  private runInProcess(jobDir: string): void {
+    // Dynamically import and run the worker logic in-process
+    import("./job-worker.js").then(({ resolveCliConfig }) => {
+      let descriptor: JobDescriptor;
+      try {
+        descriptor = JSON.parse(
+          readFileSync(join(jobDir, "job.json"), "utf-8"),
+        ) as JobDescriptor;
+      } catch {
+        return;
+      }
+
+      const resolved = resolveCliConfig(descriptor);
+      if (!resolved) {
+        const statusPath = join(jobDir, "status.json");
+        const current = JSON.parse(readFileSync(statusPath, "utf-8")) as JobStatus;
+        atomicWriteJsonSync(statusPath, {
+          ...current,
+          state: "missing_cli",
+          completedAt: new Date().toISOString(),
+        });
+        atomicWriteSync(
+          join(jobDir, "error.txt"),
+          `No CLI mapping for provider: ${descriptor.provider}`,
+        );
+        return;
+      }
+
+      const { command, buildArgs } = resolved;
+      const prompt = readFileSync(join(jobDir, "prompt.txt"), "utf-8");
+      const args = buildArgs(prompt);
+
+      // Mark running
+      const statusPath = join(jobDir, "status.json");
+      const currentStatus = JSON.parse(readFileSync(statusPath, "utf-8")) as JobStatus;
+      atomicWriteJsonSync(statusPath, {
+        ...currentStatus,
+        state: "running",
+        startedAt: new Date().toISOString(),
+      });
+
+      const proc = spawn(command, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      proc.stdout!.on("data", (data: Buffer) => {
+        stdout += data.toString();
+      });
+      proc.stderr!.on("data", (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      const timer = setTimeout(() => {
+        proc.kill("SIGTERM");
+        setTimeout(() => {
+          try { proc.kill("SIGKILL"); } catch { /* already dead */ }
+        }, 3000);
+
+        atomicWriteSync(join(jobDir, "output.txt"), stdout);
+        atomicWriteSync(join(jobDir, "error.txt"), stderr);
+        const s = JSON.parse(readFileSync(statusPath, "utf-8")) as JobStatus;
+        atomicWriteJsonSync(statusPath, {
+          ...s,
+          state: "timed_out",
+          completedAt: new Date().toISOString(),
+        });
+      }, descriptor.timeout);
+
+      proc.on("close", (code) => {
+        clearTimeout(timer);
+        atomicWriteSync(join(jobDir, "output.txt"), stdout);
+        atomicWriteSync(join(jobDir, "error.txt"), stderr);
+        const s = JSON.parse(readFileSync(statusPath, "utf-8")) as JobStatus;
+        atomicWriteJsonSync(statusPath, {
+          ...s,
+          state: code === 0 ? "completed" : "error",
+          exitCode: code ?? 1,
+          completedAt: new Date().toISOString(),
+        });
+      });
+
+      proc.on("error", (err) => {
+        clearTimeout(timer);
+        atomicWriteSync(join(jobDir, "error.txt"), err.message);
+        const s = JSON.parse(readFileSync(statusPath, "utf-8")) as JobStatus;
+        atomicWriteJsonSync(statusPath, {
+          ...s,
+          state: "missing_cli",
+          completedAt: new Date().toISOString(),
+        });
+      });
+    }).catch(() => {
+      // If dynamic import fails entirely, mark job as error
+      try {
+        const statusPath = join(jobDir, "status.json");
+        const current = JSON.parse(readFileSync(statusPath, "utf-8")) as JobStatus;
+        atomicWriteJsonSync(statusPath, {
+          ...current,
+          state: "error",
+          completedAt: new Date().toISOString(),
+        });
+        atomicWriteSync(
+          join(jobDir, "error.txt"),
+          "Failed to load job worker module",
+        );
+      } catch {
+        // Nothing we can do
+      }
     });
-    child.unref();
   }
 }

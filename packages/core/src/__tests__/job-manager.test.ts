@@ -224,6 +224,37 @@ describe("JobManager", () => {
     expect(existsSync(join(jobsDir, "recent-job"))).toBe(true);
   });
 
+  // ── Stale job detection ──────────────────────────────────────
+
+  it("should mark stale queued jobs as error", () => {
+    const jobId = manager.submit({ provider: "gemini", prompt: "stale test" });
+
+    // Manually backdate the job descriptor to make it stale (> 30s)
+    const jobDir = join(tmp, ".agestra/.jobs", jobId);
+    const descriptor: JobDescriptor = JSON.parse(readFileSync(join(jobDir, "job.json"), "utf-8"));
+    descriptor.createdAt = new Date(Date.now() - 60_000).toISOString(); // 60s ago
+    writeFileSync(join(jobDir, "job.json"), JSON.stringify(descriptor));
+
+    const status = manager.getStatus(jobId);
+    expect(status).not.toBeNull();
+    expect(status!.state).toBe("error");
+    expect(status!.completedAt).toBeDefined();
+
+    // Verify error message was written
+    expect(existsSync(join(jobDir, "error.txt"))).toBe(true);
+    const errorText = readFileSync(join(jobDir, "error.txt"), "utf-8");
+    expect(errorText).toContain("stalled");
+  });
+
+  it("should not mark recent queued jobs as stale", () => {
+    const jobId = manager.submit({ provider: "gemini", prompt: "recent test" });
+
+    // Job was just created, should still be queued
+    const status = manager.getStatus(jobId);
+    expect(status).not.toBeNull();
+    expect(status!.state).toBe("queued");
+  });
+
   // ── A3: cliCommand / cliArgs in job.json ────────────────────
 
   it("submit includes cliCommand and cliArgs in job.json", () => {

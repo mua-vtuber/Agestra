@@ -155,46 +155,46 @@ describe("memory tools (new)", () => {
       });
     });
 
-    it("should throw for missing required fields", async () => {
+    it("should return error for missing required fields", async () => {
       const deps: MemoryToolDeps = { memoryFacade: mockMemoryFacade() };
 
-      await expect(
-        handleTool("memory_store", { content: "test" }, deps),
-      ).rejects.toThrow();
+      const result = await handleTool("memory_store", { content: "test" }, deps);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory operation failed");
     });
 
-    it("should throw for invalid node_type", async () => {
+    it("should return error for invalid node_type", async () => {
       const deps: MemoryToolDeps = { memoryFacade: mockMemoryFacade() };
 
-      await expect(
-        handleTool(
-          "memory_store",
-          {
-            content: "test",
-            node_type: "invalid_type",
-            topic: "technical",
-            importance: 0.5,
-          },
-          deps,
-        ),
-      ).rejects.toThrow();
+      const result = await handleTool(
+        "memory_store",
+        {
+          content: "test",
+          node_type: "invalid_type",
+          topic: "technical",
+          importance: 0.5,
+        },
+        deps,
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory operation failed");
     });
 
-    it("should throw for importance out of range", async () => {
+    it("should return error for importance out of range", async () => {
       const deps: MemoryToolDeps = { memoryFacade: mockMemoryFacade() };
 
-      await expect(
-        handleTool(
-          "memory_store",
-          {
-            content: "test",
-            node_type: "fact",
-            topic: "technical",
-            importance: 1.5,
-          },
-          deps,
-        ),
-      ).rejects.toThrow();
+      const result = await handleTool(
+        "memory_store",
+        {
+          content: "test",
+          node_type: "fact",
+          topic: "technical",
+          importance: 1.5,
+        },
+        deps,
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory operation failed");
     });
   });
 
@@ -243,12 +243,12 @@ describe("memory tools (new)", () => {
       expect(result.content[0].text).toContain("no failures here");
     });
 
-    it("should throw for missing query", async () => {
+    it("should return error for missing query", async () => {
       const deps: MemoryToolDeps = { memoryFacade: mockMemoryFacade() };
 
-      await expect(
-        handleTool("memory_dead_ends", {}, deps),
-      ).rejects.toThrow();
+      const result = await handleTool("memory_dead_ends", {}, deps);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory operation failed");
     });
   });
 
@@ -298,12 +298,12 @@ describe("memory tools (new)", () => {
       expect(text).toContain("**Tokens used:** 0");
     });
 
-    it("should throw for missing query", async () => {
+    it("should return error for missing query", async () => {
       const deps: MemoryToolDeps = { memoryFacade: mockMemoryFacade() };
 
-      await expect(
-        handleTool("memory_context", {}, deps),
-      ).rejects.toThrow();
+      const result = await handleTool("memory_context", {}, deps);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory operation failed");
     });
   });
 
@@ -363,28 +363,103 @@ describe("memory tools (new)", () => {
       }
     });
 
-    it("should throw for invalid relation_type", async () => {
+    it("should return error for invalid relation_type", async () => {
       const deps: MemoryToolDeps = { memoryFacade: mockMemoryFacade() };
 
-      await expect(
-        handleTool(
-          "memory_add_edge",
-          {
-            source_id: "a",
-            target_id: "b",
-            relation_type: "invalid_relation",
-          },
-          deps,
-        ),
-      ).rejects.toThrow();
+      const result = await handleTool(
+        "memory_add_edge",
+        {
+          source_id: "a",
+          target_id: "b",
+          relation_type: "invalid_relation",
+        },
+        deps,
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory operation failed");
     });
 
-    it("should throw for missing required fields", async () => {
+    it("should return error for missing required fields", async () => {
       const deps: MemoryToolDeps = { memoryFacade: mockMemoryFacade() };
 
-      await expect(
-        handleTool("memory_add_edge", { source_id: "a" }, deps),
-      ).rejects.toThrow();
+      const result = await handleTool("memory_add_edge", { source_id: "a" }, deps);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory operation failed");
+    });
+  });
+
+  describe("graceful error handling", () => {
+    it("should return isError when memoryFacade is not initialized", async () => {
+      const facade = mockMemoryFacade({ isInitialized: false } as unknown as Partial<MemoryFacade>);
+      const deps: MemoryToolDeps = { memoryFacade: facade };
+
+      const result = await handleTool(
+        "memory_search",
+        { query: "test" },
+        deps,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory system is unavailable");
+    });
+
+    it("should return isError for all tools when not initialized", async () => {
+      const facade = mockMemoryFacade({ isInitialized: false } as unknown as Partial<MemoryFacade>);
+      const deps: MemoryToolDeps = { memoryFacade: facade };
+
+      const tools = [
+        { name: "memory_search", args: { query: "test" } },
+        { name: "memory_store", args: { content: "x", node_type: "fact", topic: "technical", importance: 0.5 } },
+        { name: "memory_dead_ends", args: { query: "test" } },
+        { name: "memory_context", args: { query: "test" } },
+        { name: "memory_add_edge", args: { source_id: "a", target_id: "b", relation_type: "related_to" } },
+        { name: "memory_index", args: { paths: ["/tmp/test"] } },
+      ];
+
+      for (const tool of tools) {
+        const result = await handleTool(tool.name, tool.args, deps);
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("unavailable");
+      }
+    });
+
+    it("should catch runtime errors and return graceful message", async () => {
+      const facade = mockMemoryFacade({
+        search: vi.fn().mockRejectedValue(new Error("Database connection lost")),
+      });
+      const deps: MemoryToolDeps = { memoryFacade: facade };
+
+      const result = await handleTool(
+        "memory_search",
+        { query: "test" },
+        deps,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory operation failed");
+      expect(result.content[0].text).toContain("Database connection lost");
+    });
+
+    it("should catch sync runtime errors", async () => {
+      const facade = mockMemoryFacade({
+        store: vi.fn().mockImplementation(() => { throw new Error("Write failed"); }),
+      });
+      const deps: MemoryToolDeps = { memoryFacade: facade };
+
+      const result = await handleTool(
+        "memory_store",
+        {
+          content: "test",
+          node_type: "fact",
+          topic: "technical",
+          importance: 0.5,
+        },
+        deps,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Memory operation failed");
+      expect(result.content[0].text).toContain("Write failed");
     });
   });
 
