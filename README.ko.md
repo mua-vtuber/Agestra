@@ -26,6 +26,31 @@ claude plugin add agestra
 
 ---
 
+## 철학
+
+**멀티 AI는 검증을 위한 것이지, 토큰 절약을 위한 것이 아닙니다.** 리뷰, 설계 탐색, 아이디어 발굴 워크플로우는 검증 프로세스로 설계되었습니다 — 속도를 위한 병렬화가 아니라, 사각지대를 잡기 위해 여러 AI 공급자로부터 독립적인 의견을 얻는 것입니다.
+
+## 커맨드
+
+| 커맨드 | 설명 |
+|--------|------|
+| `/agestra review [대상]` | 코드 품질, 보안, 통합 완성도 검증 |
+| `/agestra idea [주제]` | 유사 프로젝트 비교를 통한 개선점 발굴 |
+| `/agestra design [주제]` | 구현 전 아키텍처 및 설계 트레이드오프 탐색 |
+
+각 커맨드는 선택지를 제시합니다: **Claude만**, **비교** (여러 AI 나란히), **토론** (구조화된 멀티AI 논의), **기타** (사용자 지정).
+
+## 에이전트
+
+| 에이전트 | 모델 | 역할 |
+|----------|------|------|
+| `reviewer` | Opus | 엄격한 품질 검증 — 보안, 고아 시스템, 스펙 이탈, 테스트 공백 |
+| `designer` | Opus | 아키텍처 탐색 — 소크라테스식 질문, 트레이드오프 분석 |
+| `ideator` | Sonnet | 개선점 발굴 — 웹 리서치, 경쟁 분석 |
+| `moderator` | Sonnet | 토론 진행 — 중립, 턴 관리, 합의 판정 |
+
+---
+
 ## 아키텍처
 
 Turborepo 모노레포, 8개 패키지:
@@ -163,11 +188,19 @@ npm run clean      # dist/ 삭제
 ```
 agestra/
 ├── plugin.json              # Claude Code 플러그인 매니페스트
+├── commands/
+│   ├── review.md            # /agestra review — 품질 검증
+│   ├── idea.md              # /agestra idea — 개선점 발굴
+│   └── design.md            # /agestra design — 아키텍처 탐색
+├── agents/
+│   ├── reviewer.md          # 엄격한 품질 검증자 (Opus)
+│   ├── designer.md          # 아키텍처 탐색자 (Opus)
+│   ├── ideator.md           # 개선점 발굴자 (Sonnet)
+│   └── moderator.md         # 토론 진행자 (Sonnet)
 ├── skills/
 │   └── provider-guide.md    # 공급자 사용 가이드라인 (skill)
 ├── hooks/
-│   ├── user-prompt-submit.md  # 도구 추천 hook
-│   └── stop.md                # 완료 검증 hook
+│   └── user-prompt-submit.md  # 도구 추천 hook
 ├── dist/
 │   └── bundle.js            # 단일 파일 MCP 서버 번들
 ├── scripts/

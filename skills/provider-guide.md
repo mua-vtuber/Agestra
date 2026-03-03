@@ -63,6 +63,18 @@ Match by **semantic intent**, not literal keywords. These triggers apply in any 
 | Large refactoring, many files to change | `agent_dispatch` | Split by file/module for parallel processing |
 | About to commit, create PR, finalize work | `agent_cross_validate` | Pre-commit validation by other AI providers |
 
+### Commands and Agents
+
+| Command | Specialist Agent | Purpose |
+|---------|-----------------|---------|
+| `/agestra review` | `reviewer` | Post-implementation quality verification |
+| `/agestra idea` | `ideator` | Improvement discovery and competitive analysis |
+| `/agestra design` | `designer` | Pre-implementation architecture exploration |
+
+When "Debate" is selected, `moderator` facilitates while the specialist provides Claude's perspective.
+
+Commands and hook-triggered suggestions share the same 4-choice pattern. Commands are explicit entry points; hooks detect intent from natural language.
+
 ### Hook-Triggered Choice
 
 When an `AGESTRA_SUGGESTION` marker appears from the UserPromptSubmit hook, present these choices:

@@ -26,6 +26,31 @@ At least one AI provider must be installed:
 
 ---
 
+## Philosophy
+
+**Multi-AI is for verification, not token savings.** The review, design exploration, and idea generation workflows are structured as validation processes — getting independent opinions from multiple AI providers to catch blind spots, not to parallelize for speed.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/agestra review [target]` | Review code quality, security, and integration completeness |
+| `/agestra idea [topic]` | Discover improvements by comparing with similar projects |
+| `/agestra design [subject]` | Explore architecture and design trade-offs before implementation |
+
+Each command presents a choice: **Claude only**, **Compare** (multiple AIs side-by-side), **Debate** (structured multi-AI discussion), or **Other** (user-specified).
+
+## Agents
+
+| Agent | Model | Role |
+|-------|-------|------|
+| `reviewer` | Opus | Strict quality verifier — security, orphans, spec drift, test gaps |
+| `designer` | Opus | Architecture explorer — Socratic questioning, trade-off analysis |
+| `ideator` | Sonnet | Improvement discoverer — web research, competitive analysis |
+| `moderator` | Sonnet | Debate facilitator — neutral, manages turns, judges consensus |
+
+---
+
 ## Architecture
 
 Turborepo monorepo with 8 packages:
@@ -163,11 +188,19 @@ npm run clean      # Remove dist/
 ```
 agestra/
 ├── plugin.json              # Claude Code plugin manifest
+├── commands/
+│   ├── review.md            # /agestra review — quality verification
+│   ├── idea.md              # /agestra idea — improvement discovery
+│   └── design.md            # /agestra design — architecture exploration
+├── agents/
+│   ├── reviewer.md          # Strict quality verifier (Opus)
+│   ├── designer.md          # Architecture explorer (Opus)
+│   ├── ideator.md           # Improvement discoverer (Sonnet)
+│   └── moderator.md         # Debate facilitator (Sonnet)
 ├── skills/
 │   └── provider-guide.md    # Provider usage guidelines (skill)
 ├── hooks/
-│   ├── user-prompt-submit.md  # Tool recommendation hook
-│   └── stop.md                # Completion verification hook
+│   └── user-prompt-submit.md  # Tool recommendation hook
 ├── dist/
 │   └── bundle.js            # Single-file MCP server bundle
 ├── scripts/

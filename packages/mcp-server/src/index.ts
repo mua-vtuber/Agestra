@@ -140,7 +140,12 @@ async function main(): Promise<void> {
   const sessionManager = new SessionManager(join(baseDir, ".agestra/sessions"));
   const documentManager = new DocumentManager(join(baseDir, ".agestra/workspace"));
   const memoryFacade = new MemoryFacade({ dbPath: join(baseDir, ".agestra/memory.db") });
-  await memoryFacade.initialize();
+  try {
+    await memoryFacade.initialize();
+  } catch (err) {
+    log(`Memory system unavailable: ${err instanceof Error ? err.message : String(err)}`);
+    log("Memory tools will be non-functional. Other tools work normally.");
+  }
   const jobManager = new JobManager(baseDir);
 
   // 4. Create and connect MCP server
