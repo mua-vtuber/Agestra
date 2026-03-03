@@ -62,8 +62,8 @@ const AgentDebateCreateSchema = z.object({
 
 const AgentDebateTurnSchema = z.object({
   debate_id: z.string().describe("Debate session ID"),
-  provider: z.string().describe("Provider ID to take this turn"),
-  claude_comment: z.string().optional().describe("Claude's opinion injected before this turn"),
+  provider: z.string().describe("Provider ID to take this turn. Use \"claude\" to record Claude's own opinion as an independent turn (requires claude_comment)."),
+  claude_comment: z.string().optional().describe("Claude's opinion. When provider is \"claude\", this becomes the turn content. Otherwise, injected before the provider responds."),
 });
 
 const AgentDebateConcludeSchema = z.object({
@@ -249,7 +249,8 @@ export function getTools() {
     {
       name: "agent_debate_turn",
       description:
-        "Execute one provider's turn in a debate. Optionally inject Claude's comment before the provider responds. Returns the provider's response.",
+        "Execute one provider's turn in a debate. Optionally inject Claude's comment before the provider responds. Returns the provider's response. " +
+        "Use provider: \"claude\" with claude_comment to record Claude's own independent opinion as a debate turn.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -597,9 +598,9 @@ async function handleDebateCreate(
 ): Promise<McpToolResult> {
   const parsed = AgentDebateCreateSchema.parse(args);
 
-  // Validate all providers exist
+  // Validate all providers exist (skip "claude" — it's the host AI, not a registry entry)
   for (const id of parsed.providers) {
-    deps.registry.get(id);
+    if (id !== "claude") deps.registry.get(id);
   }
 
   // Create workspace document if requested
@@ -650,7 +651,34 @@ async function handleDebateTurn(
     };
   }
 
-  // Validate provider exists
+  // ── Claude as independent participant ──────────────────────
+  if (parsed.provider === "claude") {
+    if (!parsed.claude_comment) {
+      return {
+        content: [{ type: "text", text: "provider: \"claude\" requires claude_comment to be set." }],
+        isError: true,
+      };
+    }
+
+    debateEngine.addTurn(parsed.debate_id, "claude", parsed.claude_comment);
+    if (state.documentId) {
+      await deps.documentManager.addComment(state.documentId, {
+        author: "Claude",
+        content: parsed.claude_comment,
+      });
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `**[claude]:** ${parsed.claude_comment}`,
+        },
+      ],
+    };
+  }
+
+  // ── Regular provider turn ─────────────────────────────────
   const provider = deps.registry.get(parsed.provider);
 
   // Inject Claude's comment first if provided

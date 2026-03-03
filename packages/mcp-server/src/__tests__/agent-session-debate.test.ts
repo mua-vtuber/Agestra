@@ -431,6 +431,178 @@ describe("agent-session turn-based debate tools", () => {
     });
   });
 
+  describe("Claude as independent debate participant", () => {
+    it("should allow 'claude' in providers list for debate create", async () => {
+      const gemini = mockProvider("gemini", ["response"]);
+      const deps = makeDeps([gemini]);
+
+      const result = await handleTool(
+        "agent_debate_create",
+        { topic: "Test", providers: ["gemini", "claude"] },
+        deps,
+      );
+
+      expect(result.isError).toBeUndefined();
+      const text = result.content[0].text;
+      expect(text).toContain("Debate created");
+      expect(text).toContain("gemini, claude");
+    });
+
+    it("should record Claude turn as independent opinion", async () => {
+      const gemini = mockProvider("gemini", []);
+      const deps = makeDeps([gemini]);
+
+      const createResult = await handleTool(
+        "agent_debate_create",
+        { topic: "API design", providers: ["gemini", "claude"], save_document: false },
+        deps,
+      );
+      const debateId = createResult.content[0].text.match(/Debate ID:\*\* (\S+)/)![1];
+
+      const turnResult = await handleTool(
+        "agent_debate_turn",
+        {
+          debate_id: debateId,
+          provider: "claude",
+          claude_comment: "I think REST is the best approach for this API",
+        },
+        deps,
+      );
+
+      expect(turnResult.isError).toBeUndefined();
+      expect(turnResult.content[0].text).toContain("[claude]:");
+      expect(turnResult.content[0].text).toContain("I think REST is the best approach");
+    });
+
+    it("should error when provider is 'claude' but claude_comment is missing", async () => {
+      const gemini = mockProvider("gemini", []);
+      const deps = makeDeps([gemini]);
+
+      const createResult = await handleTool(
+        "agent_debate_create",
+        { topic: "Test", providers: ["gemini", "claude"], save_document: false },
+        deps,
+      );
+      const debateId = createResult.content[0].text.match(/Debate ID:\*\* (\S+)/)![1];
+
+      const turnResult = await handleTool(
+        "agent_debate_turn",
+        { debate_id: debateId, provider: "claude" },
+        deps,
+      );
+
+      expect(turnResult.isError).toBe(true);
+      expect(turnResult.content[0].text).toContain("requires claude_comment");
+    });
+
+    it("should include Claude turn in subsequent provider prompts", async () => {
+      let capturedPrompt = "";
+      const gemini: AIProvider = {
+        ...mockProvider("gemini", []),
+        chat: async (req: ChatRequest) => {
+          capturedPrompt = req.prompt;
+          return { text: "I agree with Claude", model: "mock", provider: "gemini" };
+        },
+      };
+      const deps = makeDeps([gemini]);
+
+      const createResult = await handleTool(
+        "agent_debate_create",
+        { topic: "API design", providers: ["gemini", "claude"], save_document: false },
+        deps,
+      );
+      const debateId = createResult.content[0].text.match(/Debate ID:\*\* (\S+)/)![1];
+
+      // Claude's independent turn
+      await handleTool(
+        "agent_debate_turn",
+        {
+          debate_id: debateId,
+          provider: "claude",
+          claude_comment: "REST is superior for public APIs",
+        },
+        deps,
+      );
+
+      // Gemini's turn — should see Claude's opinion in the prompt
+      await handleTool(
+        "agent_debate_turn",
+        { debate_id: debateId, provider: "gemini" },
+        deps,
+      );
+
+      expect(capturedPrompt).toContain("claude:");
+      expect(capturedPrompt).toContain("REST is superior for public APIs");
+    });
+
+    it("should record Claude turn to workspace document", async () => {
+      const gemini = mockProvider("gemini", []);
+      const deps = makeDeps([gemini]);
+
+      const createResult = await handleTool(
+        "agent_debate_create",
+        { topic: "Test", providers: ["gemini", "claude"] },
+        deps,
+      );
+      const text = createResult.content[0].text;
+      const debateId = text.match(/Debate ID:\*\* (\S+)/)![1];
+      const docId = text.match(/Document ID:\*\* (\S+)/)![1];
+
+      await handleTool(
+        "agent_debate_turn",
+        {
+          debate_id: debateId,
+          provider: "claude",
+          claude_comment: "My independent analysis says REST",
+        },
+        deps,
+      );
+
+      const doc = await documentManager.read(docId);
+      expect(doc.content).toContain("Claude");
+      expect(doc.content).toContain("My independent analysis says REST");
+    });
+
+    it("should include Claude turn in conclude transcript", async () => {
+      const gemini = mockProvider("gemini", ["Gemini agrees"]);
+      const deps = makeDeps([gemini]);
+
+      const createResult = await handleTool(
+        "agent_debate_create",
+        { topic: "Architecture", providers: ["gemini", "claude"], save_document: false },
+        deps,
+      );
+      const debateId = createResult.content[0].text.match(/Debate ID:\*\* (\S+)/)![1];
+
+      await handleTool(
+        "agent_debate_turn",
+        {
+          debate_id: debateId,
+          provider: "claude",
+          claude_comment: "Claude's architecture opinion",
+        },
+        deps,
+      );
+      await handleTool(
+        "agent_debate_turn",
+        { debate_id: debateId, provider: "gemini" },
+        deps,
+      );
+
+      const concludeResult = await handleTool(
+        "agent_debate_conclude",
+        { debate_id: debateId },
+        deps,
+      );
+
+      const concludeText = concludeResult.content[0].text;
+      expect(concludeText).toContain("Claude's architecture opinion");
+      expect(concludeText).toContain("Gemini agrees");
+      // 2 turns: 1 Claude + 1 Gemini
+      expect(concludeText).toContain("Turns:");
+    });
+  });
+
   describe("full debate flow", () => {
     it("should run create -> turn -> turn -> conclude with document", async () => {
       const gemini = mockProvider("gemini", ["Gemini view 1", "Gemini view 2"]);
