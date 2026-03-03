@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { readFileSync, statSync, readdirSync } from "fs";
+import { resolve, relative, join } from "path";
 import type { MemoryFacade } from "@agestra/memory";
 
 // ── Zod schemas ──────────────────────────────────────────────
@@ -200,6 +202,33 @@ async function handleMemorySearch(
   return { content: [{ type: "text", text }] };
 }
 
+const MAX_FILE_SIZE = 100 * 1024; // 100KB max per file for indexing
+const MAX_CONTENT_LENGTH = 2000; // Truncate content for storage
+
+function assertIndexPathSafe(filePath: string): string {
+  const cwd = process.cwd();
+  const resolved = resolve(cwd, filePath);
+  const rel = relative(cwd, resolved);
+  if (rel.startsWith("..")) {
+    throw new Error(`Path traversal blocked: ${filePath} escapes working directory`);
+  }
+  return resolved;
+}
+
+function collectFiles(dirPath: string): string[] {
+  const files: string[] = [];
+  const entries = readdirSync(dirPath, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = join(dirPath, entry.name);
+    if (entry.isFile()) {
+      files.push(full);
+    } else if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
+      files.push(...collectFiles(full));
+    }
+  }
+  return files;
+}
+
 async function handleMemoryIndex(
   args: unknown,
   deps: MemoryToolDeps,
@@ -209,25 +238,46 @@ async function handleMemoryIndex(
   let indexed = 0;
   const errors: string[] = [];
 
-  for (const filePath of parsed.paths) {
+  for (const inputPath of parsed.paths) {
     try {
-      // Index each file as a knowledge node
-      deps.memoryFacade.store({
-        content: `Indexed file: ${filePath}`,
-        nodeType: "fact",
-        topic: "context",
-        importance: 0.5,
-        source: "auto",
-      });
-      indexed++;
+      const safePath = assertIndexPathSafe(inputPath);
+      const stat = statSync(safePath);
+      const filesToIndex = stat.isDirectory() ? collectFiles(safePath) : [safePath];
+
+      for (const filePath of filesToIndex) {
+        try {
+          const fileStat = statSync(filePath);
+          if (fileStat.size > MAX_FILE_SIZE) {
+            errors.push(`${filePath}: File too large (${fileStat.size} bytes, max ${MAX_FILE_SIZE})`);
+            continue;
+          }
+
+          const content = readFileSync(filePath, "utf-8");
+          const truncated = content.length > MAX_CONTENT_LENGTH
+            ? content.slice(0, MAX_CONTENT_LENGTH) + "\n...[truncated]"
+            : content;
+
+          deps.memoryFacade.store({
+            content: `File: ${filePath}\n\n${truncated}`,
+            nodeType: "fact",
+            topic: "context",
+            importance: 0.5,
+            source: "auto",
+          });
+          indexed++;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push(`${filePath}: ${msg}`);
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      errors.push(`${filePath}: ${msg}`);
+      errors.push(`${inputPath}: ${msg}`);
     }
   }
 
   let text = `**Indexing complete**\n`;
-  text += `- **Indexed:** ${indexed} path(s)\n`;
+  text += `- **Indexed:** ${indexed} file(s)\n`;
   text += `- **Errors:** ${errors.length}\n`;
 
   if (errors.length > 0) {

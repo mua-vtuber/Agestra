@@ -518,3 +518,41 @@ describe("memory tools (new)", () => {
     });
   });
 });
+
+// ── Security: memory_index path validation ──────────────────
+
+describe("memory_index security", () => {
+  it("should reject path traversal attempts", async () => {
+    const storeSpy = vi.fn().mockReturnValue("node-id");
+    const facade = mockMemoryFacade({ store: storeSpy });
+    const deps: MemoryToolDeps = { memoryFacade: facade };
+
+    const result = await handleTool(
+      "memory_index",
+      { paths: ["../../etc/passwd"] },
+      deps,
+    );
+
+    // Should have errors and storeSpy should not be called for the traversal path
+    const text = result.content[0].text;
+    expect(text).toContain("**Errors:**");
+    expect(text).toContain("Path traversal blocked");
+  });
+
+  it("should reject multiple traversal patterns", async () => {
+    const storeSpy = vi.fn().mockReturnValue("node-id");
+    const facade = mockMemoryFacade({ store: storeSpy });
+    const deps: MemoryToolDeps = { memoryFacade: facade };
+
+    const result = await handleTool(
+      "memory_index",
+      { paths: ["../secret", "../../root/.ssh/id_rsa"] },
+      deps,
+    );
+
+    const text = result.content[0].text;
+    expect(text).toContain("**Errors:** 2");
+    expect(result.isError).toBe(true);
+    expect(storeSpy).not.toHaveBeenCalled();
+  });
+});

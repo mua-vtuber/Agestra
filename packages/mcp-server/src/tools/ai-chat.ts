@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { readFileSync } from "fs";
+import { resolve, relative } from "path";
 import type { ProviderRegistry, AIProvider } from "@agestra/core";
 import { atomicWriteSync } from "@agestra/core";
 
@@ -34,6 +35,18 @@ export interface ToolDeps {
 interface McpToolResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
+}
+
+// ── Path validation ─────────────────────────────────────────
+
+function assertPathSafe(filePath: string): string {
+  const cwd = process.cwd();
+  const resolved = resolve(cwd, filePath);
+  const rel = relative(cwd, resolved);
+  if (rel.startsWith("..")) {
+    throw new Error(`Path traversal blocked: ${filePath} escapes working directory`);
+  }
+  return resolved;
 }
 
 // ── Tool definitions ─────────────────────────────────────────
@@ -135,9 +148,10 @@ async function handleAiAnalyzeFiles(
   const parsed = AiAnalyzeFilesSchema.parse(args);
   const provider = deps.registry.get(parsed.provider);
 
-  // Read file contents
+  // Read file contents (with path validation)
   const fileContents = parsed.file_paths.map((filePath) => {
-    const content = readFileSync(filePath, "utf-8");
+    const safePath = assertPathSafe(filePath);
+    const content = readFileSync(safePath, "utf-8");
     return `--- ${filePath} ---\n${content}`;
   });
 
@@ -145,9 +159,10 @@ async function handleAiAnalyzeFiles(
 
   const response = await provider.chat({ prompt: combinedPrompt });
 
-  // Optionally save to file
+  // Optionally save to file (with path validation)
   if (parsed.save_to_file) {
-    atomicWriteSync(parsed.save_to_file, response.text);
+    const safeSavePath = assertPathSafe(parsed.save_to_file);
+    atomicWriteSync(safeSavePath, response.text);
   }
 
   const savedNote = parsed.save_to_file

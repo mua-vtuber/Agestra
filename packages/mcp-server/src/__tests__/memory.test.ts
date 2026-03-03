@@ -1,6 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
 import { getTools, handleTool, type MemoryToolDeps } from "../tools/memory.js";
 import type { MemoryFacade } from "@agestra/memory";
+import { readFileSync, statSync, readdirSync } from "fs";
+
+vi.mock("fs", async () => {
+  const actual = await vi.importActual<typeof import("fs")>("fs");
+  return {
+    ...actual,
+    readFileSync: vi.fn().mockReturnValue('const x = 1;'),
+    statSync: vi.fn().mockReturnValue({ isFile: () => true, isDirectory: () => false, size: 100 }),
+    readdirSync: vi.fn().mockReturnValue([]),
+  };
+});
 
 // ── Mock helpers ─────────────────────────────────────────────
 
@@ -179,12 +190,14 @@ describe("memory tools", () => {
     it("should index files and return count", async () => {
       const storeSpy = vi.fn().mockReturnValue("node-id");
       const facade = mockMemoryFacade({ store: storeSpy });
-
       const deps: MemoryToolDeps = { memoryFacade: facade };
+
+      vi.mocked(statSync).mockReturnValue({ isFile: () => true, isDirectory: () => false, size: 100 } as any);
+      vi.mocked(readFileSync).mockReturnValue('const x = 1;');
 
       const result = await handleTool(
         "memory_index",
-        { paths: ["/src/main.ts", "/src/util.ts"] },
+        { paths: ["src/main.ts", "src/util.ts"] },
         deps,
       );
 
@@ -199,14 +212,11 @@ describe("memory tools", () => {
           source: "auto",
           nodeType: "fact",
           topic: "context",
-          content: "Indexed file: /src/main.ts",
         }),
       );
-      expect(storeSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          content: "Indexed file: /src/util.ts",
-        }),
-      );
+      // Content should now include the file content, not just the path
+      const firstCall = storeSpy.mock.calls[0][0];
+      expect(firstCall.content).toContain("const x = 1;");
     });
 
     it("should handle errors during indexing", async () => {
@@ -217,19 +227,20 @@ describe("memory tools", () => {
         return "node-id";
       });
       const facade = mockMemoryFacade({ store: storeSpy });
-
       const deps: MemoryToolDeps = { memoryFacade: facade };
+
+      vi.mocked(statSync).mockReturnValue({ isFile: () => true, isDirectory: () => false, size: 100 } as any);
+      vi.mocked(readFileSync).mockReturnValue('code');
 
       const result = await handleTool(
         "memory_index",
-        { paths: ["/src/good.ts", "/src/bad.ts", "/src/ok.ts"] },
+        { paths: ["src/good.ts", "src/bad.ts", "src/ok.ts"] },
         deps,
       );
 
       const text = result.content[0].text;
       expect(text).toContain("**Indexed:** 2");
       expect(text).toContain("**Errors:** 1");
-      expect(text).toContain("/src/bad.ts");
       expect(text).toContain("Storage failed");
     });
 
@@ -238,12 +249,14 @@ describe("memory tools", () => {
         throw new Error("All fail");
       });
       const facade = mockMemoryFacade({ store: storeSpy });
-
       const deps: MemoryToolDeps = { memoryFacade: facade };
+
+      vi.mocked(statSync).mockReturnValue({ isFile: () => true, isDirectory: () => false, size: 100 } as any);
+      vi.mocked(readFileSync).mockReturnValue('code');
 
       const result = await handleTool(
         "memory_index",
-        { paths: ["/src/a.ts"] },
+        { paths: ["src/a.ts"] },
         deps,
       );
 
@@ -257,6 +270,24 @@ describe("memory tools", () => {
       const result = await handleTool("memory_index", { paths: [] }, deps);
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Memory operation failed");
+    });
+
+    it("should reject files exceeding size limit", async () => {
+      const storeSpy = vi.fn().mockReturnValue("node-id");
+      const facade = mockMemoryFacade({ store: storeSpy });
+      const deps: MemoryToolDeps = { memoryFacade: facade };
+
+      vi.mocked(statSync).mockReturnValue({ isFile: () => true, isDirectory: () => false, size: 200_000 } as any);
+
+      const result = await handleTool(
+        "memory_index",
+        { paths: ["src/huge.ts"] },
+        deps,
+      );
+
+      const text = result.content[0].text;
+      expect(text).toContain("File too large");
+      expect(storeSpy).not.toHaveBeenCalled();
     });
   });
 

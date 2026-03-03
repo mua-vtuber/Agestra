@@ -11,6 +11,7 @@ import { join } from "path";
 import { spawn } from "child_process";
 import { atomicWriteSync, atomicWriteJsonSync } from "./atomic-write.js";
 import type { JobDescriptor, JobStatus } from "./job-types.js";
+import { isAllowedCliCommand } from "./path-guard.js";
 
 export interface ProviderCliMapping {
   command: string;
@@ -45,6 +46,9 @@ export function resolveCliConfig(
   descriptor: Pick<JobDescriptor, "provider" | "cliCommand" | "cliArgs">,
 ): { command: string; buildArgs: (prompt: string) => string[] } | null {
   if (descriptor.cliCommand) {
+    if (!isAllowedCliCommand(descriptor.cliCommand)) {
+      return null;
+    }
     return {
       command: descriptor.cliCommand,
       buildArgs: (prompt: string) => {

@@ -11,8 +11,6 @@ export {
   type QualityCriteria,
   type ValidationResult,
 } from "./debate.js";
-export { ReviewSession } from "./review.js";
-export { TaskDelegation } from "./task-delegation.js";
 export { SessionManager, type SessionType, type Session } from "./session-manager.js";
 export { TaskDispatcher, type TaskAssignment, type DispatchConfig, type DispatchResult } from "./dispatcher.js";
 export {

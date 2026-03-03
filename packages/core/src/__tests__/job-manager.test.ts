@@ -276,35 +276,36 @@ describe("JobManager", () => {
 import { resolveCliConfig } from "../job-worker.js";
 
 describe("resolveCliConfig", () => {
-  it("uses cliCommand/cliArgs from descriptor when present", () => {
+  it("uses cliCommand/cliArgs from descriptor when allowed", () => {
     const resolved = resolveCliConfig({
       provider: "gemini",
-      cliCommand: "/usr/bin/custom-cli",
+      cliCommand: "node",
       cliArgs: ["--flag", "{prompt}", "--end"],
     });
 
     expect(resolved).not.toBeNull();
-    expect(resolved!.command).toBe("/usr/bin/custom-cli");
+    expect(resolved!.command).toBe("node");
     expect(resolved!.buildArgs("hello world")).toEqual(["--flag", "hello world", "--end"]);
   });
 
   it("substitutes {prompt} placeholder in cliArgs", () => {
     const resolved = resolveCliConfig({
       provider: "any",
-      cliCommand: "my-tool",
+      cliCommand: "npx",
       cliArgs: ["-p", "{prompt}"],
     });
 
+    expect(resolved).not.toBeNull();
     expect(resolved!.buildArgs("test prompt")).toEqual(["-p", "test prompt"]);
   });
 
   it("defaults to [prompt] when cliCommand set but cliArgs missing", () => {
     const resolved = resolveCliConfig({
       provider: "any",
-      cliCommand: "my-tool",
+      cliCommand: "node",
     });
 
-    expect(resolved!.command).toBe("my-tool");
+    expect(resolved!.command).toBe("node");
     expect(resolved!.buildArgs("hello")).toEqual(["hello"]);
   });
 
@@ -327,5 +328,67 @@ describe("resolveCliConfig", () => {
   it("returns null for unknown provider without cliCommand", () => {
     const resolved = resolveCliConfig({ provider: "unknown-provider" });
     expect(resolved).toBeNull();
+  });
+});
+
+// ── Security: jobId validation ──────────────────────────────
+
+describe("JobManager security: jobId validation", () => {
+  let tmp: string;
+  let manager: JobManager;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), "job-sec-"));
+    manager = new JobManager(tmp);
+  });
+
+  afterEach(() => {
+    if (tmp) rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("getStatus returns null for path traversal jobId", () => {
+    expect(manager.getStatus("../../etc/passwd")).toBeNull();
+    expect(manager.getStatus("../secret")).toBeNull();
+  });
+
+  it("getResult returns null for path traversal jobId", () => {
+    expect(manager.getResult("../../etc/passwd")).toBeNull();
+    expect(manager.getResult("../secret")).toBeNull();
+  });
+
+  it("cancel returns false for path traversal jobId", () => {
+    expect(manager.cancel("../../etc/passwd")).toBe(false);
+    expect(manager.cancel("../secret")).toBe(false);
+  });
+
+  it("getStatus returns null for malformed jobId", () => {
+    expect(manager.getStatus("")).toBeNull();
+    expect(manager.getStatus("no-valid-format")).toBeNull();
+    expect(manager.getStatus("rm -rf /")).toBeNull();
+  });
+});
+
+// ── Security: CLI command allowlist ─────────────────────────
+
+describe("resolveCliConfig security: command allowlist", () => {
+  it("rejects arbitrary commands", () => {
+    const resolved = resolveCliConfig({
+      provider: "custom",
+      cliCommand: "rm",
+      cliArgs: ["-rf", "/"],
+    });
+    expect(resolved).toBeNull();
+  });
+
+  it("rejects path-based commands", () => {
+    expect(resolveCliConfig({ provider: "x", cliCommand: "/bin/sh" })).toBeNull();
+    expect(resolveCliConfig({ provider: "x", cliCommand: "./malicious" })).toBeNull();
+    expect(resolveCliConfig({ provider: "x", cliCommand: "curl" })).toBeNull();
+  });
+
+  it("allows known safe commands", () => {
+    expect(resolveCliConfig({ provider: "x", cliCommand: "gemini" })).not.toBeNull();
+    expect(resolveCliConfig({ provider: "x", cliCommand: "codex" })).not.toBeNull();
+    expect(resolveCliConfig({ provider: "x", cliCommand: "node" })).not.toBeNull();
   });
 });

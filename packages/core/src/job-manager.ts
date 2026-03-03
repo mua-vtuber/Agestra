@@ -3,6 +3,7 @@ import { join } from "path";
 import { spawn } from "child_process";
 import { randomUUID } from "crypto";
 import { atomicWriteSync, atomicWriteJsonSync } from "./atomic-write.js";
+import { isValidJobId } from "./path-guard.js";
 import type { JobDescriptor, JobStatus, JobResult, JobState } from "./job-types.js";
 
 const DEFAULT_TIMEOUT = 300_000; // 5 minutes
@@ -76,6 +77,7 @@ export class JobManager {
   }
 
   getStatus(jobId: string): JobStatus | null {
+    if (!isValidJobId(jobId)) return null;
     const statusPath = join(this.jobsDir, jobId, "status.json");
     if (!existsSync(statusPath)) return null;
     const status = JSON.parse(readFileSync(statusPath, "utf-8")) as JobStatus;
@@ -108,6 +110,7 @@ export class JobManager {
   }
 
   getResult(jobId: string): JobResult | null {
+    if (!isValidJobId(jobId)) return null;
     const status = this.getStatus(jobId);
     if (!status) return null;
 
@@ -147,6 +150,7 @@ export class JobManager {
   }
 
   cancel(jobId: string): boolean {
+    if (!isValidJobId(jobId)) return false;
     const status = this.getStatus(jobId);
     if (!status) return false;
     if (status.state !== "queued" && status.state !== "running") return false;

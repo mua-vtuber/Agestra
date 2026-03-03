@@ -191,8 +191,9 @@ describe("ai-chat tools", () => {
       deps = { registry: mockRegistry([provider]) };
 
       vi.mocked(readFileSync).mockImplementation((path: any) => {
-        if (String(path) === "/project/src/main.ts") return 'console.log("hello");';
-        if (String(path) === "/project/src/util.ts") return "export function add(a: number, b: number) { return a + b; }";
+        const p = String(path);
+        if (p.endsWith("src/main.ts")) return 'console.log("hello");';
+        if (p.endsWith("src/util.ts")) return "export function add(a: number, b: number) { return a + b; }";
         throw new Error(`File not found: ${path}`);
       });
     });
@@ -202,21 +203,21 @@ describe("ai-chat tools", () => {
         "ai_analyze_files",
         {
           provider: "gemini",
-          file_paths: ["/project/src/main.ts"],
+          file_paths: ["src/main.ts"],
           question: "What does this code do?",
         },
         deps,
       );
 
-      expect(readFileSync).toHaveBeenCalledWith("/project/src/main.ts", "utf-8");
+      expect(readFileSync).toHaveBeenCalledWith(expect.stringContaining("src/main.ts"), "utf-8");
       expect(chatSpy).toHaveBeenCalledTimes(1);
       const promptArg = chatSpy.mock.calls[0][0].prompt;
-      expect(promptArg).toContain('/project/src/main.ts');
+      expect(promptArg).toContain('src/main.ts');
       expect(promptArg).toContain('console.log("hello")');
       expect(promptArg).toContain("What does this code do?");
 
       expect(result.content[0].text).toContain("Analysis result: looks good!");
-      expect(result.content[0].text).toContain("/project/src/main.ts");
+      expect(result.content[0].text).toContain("src/main.ts");
     });
 
     it("should handle multiple files", async () => {
@@ -224,7 +225,7 @@ describe("ai-chat tools", () => {
         "ai_analyze_files",
         {
           provider: "gemini",
-          file_paths: ["/project/src/main.ts", "/project/src/util.ts"],
+          file_paths: ["src/main.ts", "src/util.ts"],
           question: "Compare these files",
         },
         deps,
@@ -232,8 +233,8 @@ describe("ai-chat tools", () => {
 
       expect(readFileSync).toHaveBeenCalledTimes(2);
       const promptArg = chatSpy.mock.calls[0][0].prompt;
-      expect(promptArg).toContain("/project/src/main.ts");
-      expect(promptArg).toContain("/project/src/util.ts");
+      expect(promptArg).toContain("src/main.ts");
+      expect(promptArg).toContain("src/util.ts");
       expect(promptArg).toContain("Compare these files");
     });
 
@@ -242,9 +243,9 @@ describe("ai-chat tools", () => {
         "ai_analyze_files",
         {
           provider: "gemini",
-          file_paths: ["/project/src/main.ts"],
+          file_paths: ["src/main.ts"],
           question: "Review this",
-          save_to_file: "/output/analysis.md",
+          save_to_file: "output/analysis.md",
         },
         deps,
       );
@@ -257,9 +258,9 @@ describe("ai-chat tools", () => {
       );
       expect(renameSync).toHaveBeenCalledWith(
         expect.stringContaining(".tmp-"),
-        "/output/analysis.md",
+        expect.stringContaining("output/analysis.md"),
       );
-      expect(result.content[0].text).toContain("/output/analysis.md");
+      expect(result.content[0].text).toContain("output/analysis.md");
     });
 
     it("should throw for empty file_paths", async () => {
