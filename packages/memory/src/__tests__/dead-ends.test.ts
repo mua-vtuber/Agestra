@@ -20,9 +20,9 @@ function createNode(overrides?: Partial<KnowledgeNodeCreate>): KnowledgeNodeCrea
 describe('dead_end and finding node types', () => {
   let facade: MemoryFacade;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     facade = createFacade();
-    facade.initialize();
+    await facade.initialize();
   });
 
   afterEach(() => {

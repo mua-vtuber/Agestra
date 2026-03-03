@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
+import { SqliteDatabase } from '../db-adapter.js';
 import { ProviderTagger, ReMentionDetector, ConflictChecker, StorageStage } from '../storage-stages.js';
 import type { StoragePipelineData, EnrichedExtractionItem } from '../storage-stages.js';
 import type { ExtractionItem } from '../types.js';
 import type { AnnotatedMessage } from '../pipeline.js';
 
 /** Create an in-memory SQLite database with the required schema. */
-function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
+async function createTestDb(): Promise<SqliteDatabase> {
+  const db = await SqliteDatabase.create(':memory:');
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
@@ -111,10 +111,10 @@ describe('ProviderTagger', () => {
 // -- ReMentionDetector --
 
 describe('ReMentionDetector', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
   });
 
   afterEach(() => {
@@ -195,10 +195,10 @@ describe('ReMentionDetector', () => {
 // -- ConflictChecker --
 
 describe('ConflictChecker', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
   });
 
   afterEach(() => {
@@ -266,10 +266,10 @@ describe('ConflictChecker', () => {
 // -- StorageStage --
 
 describe('StorageStage', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
   });
 
   afterEach(() => {

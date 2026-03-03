@@ -51,13 +51,13 @@ describe('MemoryFacade', () => {
       expect(facade.isInitialized).toBe(false);
     });
 
-    it('should initialize successfully', () => {
-      facade.initialize();
+    it('should initialize successfully', async () => {
+      await facade.initialize();
       expect(facade.isInitialized).toBe(true);
     });
 
-    it('should create the required tables on initialize', () => {
-      facade.initialize();
+    it('should create the required tables on initialize', async () => {
+      await facade.initialize();
       const db = facade.getDatabase()!;
 
       // Check knowledge_nodes
@@ -79,18 +79,20 @@ describe('MemoryFacade', () => {
       expect(fts).toBeDefined();
     });
 
-    it('should set WAL mode (in-memory falls back to memory journal mode)', () => {
-      facade.initialize();
+    it('should set WAL mode (in-memory falls back to memory journal mode)', async () => {
+      await facade.initialize();
       const db = facade.getDatabase()!;
-      const result = db.pragma('journal_mode') as Array<{ journal_mode: string }>;
+      const result = db.prepare('PRAGMA journal_mode').get() as { journal_mode: string } | undefined;
       // In-memory databases cannot use WAL, so they report 'memory'.
       // On-disk databases would report 'wal'. Both are correct.
-      expect(['wal', 'memory']).toContain(result[0].journal_mode);
+      // sql.js in-memory always reports 'memory'.
+      expect(result).toBeDefined();
+      expect(['wal', 'memory']).toContain(result!.journal_mode);
     });
 
-    it('should be safe to call initialize() multiple times', () => {
-      facade.initialize();
-      facade.initialize(); // Should not throw
+    it('should be safe to call initialize() multiple times', async () => {
+      await facade.initialize();
+      await facade.initialize(); // Should not throw
       expect(facade.isInitialized).toBe(true);
     });
 
@@ -102,15 +104,15 @@ describe('MemoryFacade', () => {
   // ── Close ─────────────────────────────────────────────────────────
 
   describe('close', () => {
-    it('should be safe to call close() multiple times', () => {
-      facade.initialize();
+    it('should be safe to call close() multiple times', async () => {
+      await facade.initialize();
       facade.close();
       facade.close(); // Should not throw
       expect(facade.isInitialized).toBe(false);
     });
 
-    it('should reset initialized state on close', () => {
-      facade.initialize();
+    it('should reset initialized state on close', async () => {
+      await facade.initialize();
       expect(facade.isInitialized).toBe(true);
       facade.close();
       expect(facade.isInitialized).toBe(false);
@@ -125,8 +127,8 @@ describe('MemoryFacade', () => {
   // ── Store ─────────────────────────────────────────────────────────
 
   describe('store', () => {
-    beforeEach(() => {
-      facade.initialize();
+    beforeEach(async () => {
+      await facade.initialize();
     });
 
     it('should store a knowledge node and return an ID', () => {
@@ -177,8 +179,8 @@ describe('MemoryFacade', () => {
   // ── Search ────────────────────────────────────────────────────────
 
   describe('search', () => {
-    beforeEach(() => {
-      facade.initialize();
+    beforeEach(async () => {
+      await facade.initialize();
     });
 
     it('should return results for matching content', async () => {
@@ -229,8 +231,8 @@ describe('MemoryFacade', () => {
   // ── Store and Search Round-Trip ───────────────────────────────────
 
   describe('store and search round-trip', () => {
-    beforeEach(() => {
-      facade.initialize();
+    beforeEach(async () => {
+      await facade.initialize();
     });
 
     it('should store a node and find it via search', async () => {
@@ -255,8 +257,8 @@ describe('MemoryFacade', () => {
   // ── Evolve ────────────────────────────────────────────────────────
 
   describe('evolve', () => {
-    beforeEach(() => {
-      facade.initialize();
+    beforeEach(async () => {
+      await facade.initialize();
     });
 
     it('should not crash on empty database', () => {
@@ -277,13 +279,13 @@ describe('MemoryFacade', () => {
 
   describe('reflect', () => {
     it('should return zero result without LLM function', async () => {
-      facade.initialize();
+      await facade.initialize();
       const result = await facade.reflect();
       expect(result).toEqual({ insightsCreated: 0, nodesProcessed: 0 });
     });
 
-    it('should return false for shouldReflect() without LLM', () => {
-      facade.initialize();
+    it('should return false for shouldReflect() without LLM', async () => {
+      await facade.initialize();
       expect(facade.shouldReflect()).toBe(false);
     });
 
@@ -291,7 +293,7 @@ describe('MemoryFacade', () => {
       const facadeWithLlm = createFacade({
         reflectionLlmFn: async (_sys, _user) => '[]',
       });
-      facadeWithLlm.initialize();
+      await facadeWithLlm.initialize();
 
       const result = await facadeWithLlm.reflect();
       expect(result.insightsCreated).toBe(0);
@@ -299,12 +301,12 @@ describe('MemoryFacade', () => {
       facadeWithLlm.close();
     });
 
-    it('shouldReflect returns true when enough nodes accumulated', () => {
+    it('shouldReflect returns true when enough nodes accumulated', async () => {
       const facadeWithLlm = createFacade({
         reflectionLlmFn: async (_sys, _user) => '[]',
         memoryConfig: { reflectionThreshold: 3 },
       });
-      facadeWithLlm.initialize();
+      await facadeWithLlm.initialize();
 
       // Store enough nodes to trigger reflection
       for (let i = 0; i < 5; i++) {
@@ -322,8 +324,8 @@ describe('MemoryFacade', () => {
   // ── Pin ───────────────────────────────────────────────────────────
 
   describe('pinMessage', () => {
-    beforeEach(() => {
-      facade.initialize();
+    beforeEach(async () => {
+      await facade.initialize();
     });
 
     it('should create a pinned node', () => {
@@ -369,8 +371,8 @@ describe('MemoryFacade', () => {
   // ── Delete ────────────────────────────────────────────────────────
 
   describe('deleteNode', () => {
-    beforeEach(() => {
-      facade.initialize();
+    beforeEach(async () => {
+      await facade.initialize();
     });
 
     it('should soft-delete a node', () => {
@@ -406,8 +408,8 @@ describe('MemoryFacade', () => {
   // ── Extract and Store Pipeline ────────────────────────────────────
 
   describe('extractAndStore', () => {
-    beforeEach(() => {
-      facade.initialize();
+    beforeEach(async () => {
+      await facade.initialize();
     });
 
     it('should extract and store from messages', async () => {
@@ -433,8 +435,8 @@ describe('MemoryFacade', () => {
   // ── Context Assembly ──────────────────────────────────────────────
 
   describe('getAssembledContext', () => {
-    beforeEach(() => {
-      facade.initialize();
+    beforeEach(async () => {
+      await facade.initialize();
     });
 
     it('should return assembled context for matching memories', async () => {
@@ -468,12 +470,12 @@ describe('MemoryFacade', () => {
   describe('with embedding provider', () => {
     let facadeWithEmb: MemoryFacade;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       facadeWithEmb = createFacade({
         embeddingProvider: mockEmbeddingProvider,
         memoryConfig: { vectorEnabled: true },
       });
-      facadeWithEmb.initialize();
+      await facadeWithEmb.initialize();
     });
 
     afterEach(() => {
@@ -491,7 +493,7 @@ describe('MemoryFacade', () => {
       const db = facadeWithEmb.getDatabase()!;
       const row = db.prepare(
         'SELECT embedding, embedding_version FROM knowledge_nodes WHERE id = ?',
-      ).get(id) as { embedding: Buffer | null; embedding_version: string | null };
+      ).get(id) as { embedding: Buffer | Uint8Array | null; embedding_version: string | null };
 
       expect(row.embedding).not.toBeNull();
       expect(row.embedding_version).toBe('mock');
@@ -522,7 +524,7 @@ describe('MemoryFacade', () => {
         embeddingProvider: failingProvider,
         memoryConfig: { vectorEnabled: true },
       });
-      facadeWithFailing.initialize();
+      await facadeWithFailing.initialize();
 
       facadeWithFailing.store(createTestNode({ content: 'This will fail embedding' }));
 
@@ -552,7 +554,7 @@ describe('MemoryFacade', () => {
           callbackError = error;
         },
       });
-      facadeWithCallback.initialize();
+      await facadeWithCallback.initialize();
 
       const id = facadeWithCallback.store(createTestNode({ content: 'Callback test node' }));
 
@@ -570,8 +572,8 @@ describe('MemoryFacade', () => {
   // ── Re-initialize After Close ─────────────────────────────────────
 
   describe('re-initialization', () => {
-    it('should allow re-initialization after close', () => {
-      facade.initialize();
+    it('should allow re-initialization after close', async () => {
+      await facade.initialize();
       const id1 = facade.store(createTestNode({ content: 'Before close' }));
       expect(id1).toBeTruthy();
 
@@ -579,7 +581,7 @@ describe('MemoryFacade', () => {
       expect(facade.isInitialized).toBe(false);
 
       // Re-initialize (new in-memory DB)
-      facade.initialize();
+      await facade.initialize();
       expect(facade.isInitialized).toBe(true);
 
       // Old data is gone (new in-memory DB)

@@ -21,7 +21,7 @@ import { EmbeddingService } from './embedding-service.js';
 interface EmbeddingRow {
   id: string;
   importance: number;
-  embedding: Buffer;
+  embedding: Buffer | Uint8Array;
 }
 
 /** Raw row for prune candidates. */

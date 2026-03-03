@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import Database from 'better-sqlite3';
+import { SqliteDatabase } from '../db-adapter.js';
 import { ReflectionEngine } from '../reflector.js';
 import type { ReflectionLlmFn } from '../reflector.js';
 import { DEFAULT_MEMORY_CONFIG } from '../types.js';
@@ -7,8 +7,8 @@ import { DEFAULT_MEMORY_CONFIG } from '../types.js';
 // -- Helpers ----------------------------------------------------------------
 
 /** Create an in-memory SQLite database with the required schema. */
-function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
+async function createTestDb(): Promise<SqliteDatabase> {
+  const db = await SqliteDatabase.create(':memory:');
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
@@ -83,7 +83,7 @@ let nodeCounter = 0;
 
 /** Insert a test node directly into the DB. */
 function insertTestNode(
-  db: Database.Database,
+  db: SqliteDatabase,
   opts: {
     id?: string;
     content: string;
@@ -132,10 +132,10 @@ function createMockLlm(
 // -- shouldReflect ----------------------------------------------------------
 
 describe('ReflectionEngine.shouldReflect', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
     nodeCounter = 0;
   });
 
@@ -320,10 +320,10 @@ describe('ReflectionEngine.parseInsights', () => {
 // -- reflect ----------------------------------------------------------------
 
 describe('ReflectionEngine.reflect', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
     nodeCounter = 0;
   });
 

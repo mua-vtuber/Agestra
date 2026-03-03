@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
+import { SqliteDatabase } from '../db-adapter.js';
 import { MemoryRetriever } from '../retriever.js';
 
 /** Create an in-memory SQLite database with the required schema. */
-function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
+async function createTestDb(): Promise<SqliteDatabase> {
+  const db = await SqliteDatabase.create(':memory:');
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
@@ -76,7 +76,7 @@ function createTestDb(): Database.Database {
 
 /** Insert a node directly into the DB for testing. */
 function insertTestNode(
-  db: Database.Database,
+  db: SqliteDatabase,
   opts: {
     id: string;
     content: string;
@@ -115,11 +115,11 @@ function insertTestNode(
 // -- MemoryRetriever Tests --
 
 describe('MemoryRetriever', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
   let retriever: MemoryRetriever;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
     retriever = new MemoryRetriever(db);
   });
 

@@ -74,13 +74,14 @@ export class EmbeddingService {
   }
 
   /**
-   * Deserialize a Buffer (from SQLite BLOB) back to a float64 array.
+   * Deserialize a Buffer or Uint8Array (from SQLite BLOB) back to a float64 array.
    */
-  static blobToVector(blob: Buffer): number[] {
-    const count = blob.length / 8;
+  static blobToVector(blob: Buffer | Uint8Array): number[] {
+    const buf = Buffer.isBuffer(blob) ? blob : Buffer.from(blob.buffer, blob.byteOffset, blob.byteLength);
+    const count = buf.length / 8;
     const vec: number[] = new Array(count);
     for (let i = 0; i < count; i++) {
-      vec[i] = blob.readDoubleLE(i * 8);
+      vec[i] = buf.readDoubleLE(i * 8);
     }
     return vec;
   }
@@ -117,7 +118,7 @@ export class EmbeddingService {
    */
   rankBySimilarity(
     queryVec: number[],
-    candidates: Array<{ id: string; embedding: Buffer }>,
+    candidates: Array<{ id: string; embedding: Buffer | Uint8Array }>,
   ): Array<{ id: string; similarity: number }> {
     return candidates
       .map((candidate) => ({

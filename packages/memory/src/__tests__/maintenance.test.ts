@@ -49,7 +49,7 @@ describe('maintenance: checkIntegrity', () => {
   it('should return "ok" status for a fresh database', async () => {
     const dbPath = path.join(tmpDir, 'test.db');
     const facade = new MemoryFacade({ dbPath });
-    facade.initialize();
+    await facade.initialize();
     facade.close();
 
     const result = await checkIntegrity(dbPath);
@@ -60,7 +60,7 @@ describe('maintenance: checkIntegrity', () => {
   it('should return correct counts for an empty database', async () => {
     const dbPath = path.join(tmpDir, 'empty.db');
     const facade = new MemoryFacade({ dbPath });
-    facade.initialize();
+    await facade.initialize();
     facade.close();
 
     const result = await checkIntegrity(dbPath);
@@ -73,7 +73,7 @@ describe('maintenance: checkIntegrity', () => {
   it('should return correct counts after storing nodes', async () => {
     const dbPath = path.join(tmpDir, 'populated.db');
     const facade = new MemoryFacade({ dbPath });
-    facade.initialize();
+    await facade.initialize();
 
     facade.store(createTestNode({ content: 'First fact about memory' }));
     facade.store(createTestNode({ content: 'Second fact about indexes' }));
@@ -91,7 +91,7 @@ describe('maintenance: checkIntegrity', () => {
   it('should verify FTS5 table is accessible', async () => {
     const dbPath = path.join(tmpDir, 'fts.db');
     const facade = new MemoryFacade({ dbPath });
-    facade.initialize();
+    await facade.initialize();
     facade.store(createTestNode({ content: 'FTS test content' }));
     facade.close();
 
@@ -133,7 +133,7 @@ describe('maintenance: rebuildIndexes', () => {
   it('should include "fts5" in rebuiltIndexes on a valid database', async () => {
     const dbPath = path.join(tmpDir, 'rebuild.db');
     const facade = new MemoryFacade({ dbPath });
-    facade.initialize();
+    await facade.initialize();
     facade.store(createTestNode({ content: 'Content for rebuild test' }));
     facade.close();
 
@@ -144,7 +144,7 @@ describe('maintenance: rebuildIndexes', () => {
   it('should include "reindex" in rebuiltIndexes', async () => {
     const dbPath = path.join(tmpDir, 'reindex.db');
     const facade = new MemoryFacade({ dbPath });
-    facade.initialize();
+    await facade.initialize();
     facade.store(createTestNode({ content: 'Content for reindex test' }));
     facade.close();
 
@@ -155,7 +155,7 @@ describe('maintenance: rebuildIndexes', () => {
   it('should return positive duration', async () => {
     const dbPath = path.join(tmpDir, 'duration.db');
     const facade = new MemoryFacade({ dbPath });
-    facade.initialize();
+    await facade.initialize();
     facade.store(createTestNode({ content: 'Content for duration test' }));
     facade.close();
 
@@ -167,7 +167,7 @@ describe('maintenance: rebuildIndexes', () => {
   it('should work on an empty database', async () => {
     const dbPath = path.join(tmpDir, 'empty-rebuild.db');
     const facade = new MemoryFacade({ dbPath });
-    facade.initialize();
+    await facade.initialize();
     facade.close();
 
     const result = await rebuildIndexes(dbPath);
@@ -186,7 +186,7 @@ describe('maintenance: rebuildIndexes', () => {
     // when no vec table exists (since sqlite-vec is not loaded in test env).
     const dbPath = path.join(tmpDir, 'no-vec.db');
     const facade = new MemoryFacade({ dbPath });
-    facade.initialize();
+    await facade.initialize();
     facade.close();
 
     const result = await rebuildIndexes(dbPath);

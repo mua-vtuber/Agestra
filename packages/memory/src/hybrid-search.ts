@@ -110,12 +110,12 @@ export function deleteVecEmbedding(db: SqliteDatabase, nodeId: string): void {
  */
 export function syncAllEmbeddingsToVec(
   db: SqliteDatabase,
-  vectorToFloat32: (blob: Buffer) => Buffer,
+  vectorToFloat32: (blob: Buffer | Uint8Array) => Buffer,
 ): number {
   const rows = db.prepare(
     `SELECT id, embedding FROM knowledge_nodes
      WHERE embedding IS NOT NULL AND deleted_at IS NULL`,
-  ).all() as Array<{ id: string; embedding: Buffer }>;
+  ).all() as Array<{ id: string; embedding: Buffer | Uint8Array }>;
 
   if (rows.length === 0) return 0;
 
@@ -162,7 +162,7 @@ interface NodeRow {
   mention_count: number;
   confidence: number;
   rank?: number;
-  embedding?: Buffer | null;
+  embedding?: Buffer | Uint8Array | null;
 }
 
 /** Convert a database row to a KnowledgeNode. */
@@ -586,10 +586,10 @@ export class HybridSearch implements PipelineStage<RetrievalPipelineData, Retrie
       return scored;
     }
 
-    const embeddingCandidates: Array<{ id: string; embedding: Buffer }> = [];
+    const embeddingCandidates: Array<{ id: string; embedding: Buffer | Uint8Array }> = [];
     for (const row of candidates) {
       if (row.embedding) {
-        embeddingCandidates.push({ id: row.id, embedding: row.embedding as Buffer });
+        embeddingCandidates.push({ id: row.id, embedding: row.embedding as Buffer | Uint8Array });
       }
     }
 

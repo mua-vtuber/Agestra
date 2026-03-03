@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
+import { SqliteDatabase } from '../db-adapter.js';
 import {
   HybridSearch,
   isVecTableAvailable,
@@ -9,8 +9,8 @@ import type { RetrievalPipelineData } from '../types.js';
 import { EmbeddingService } from '../embedding-service.js';
 
 /** Create an in-memory SQLite database with the required schema. */
-function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
+async function createTestDb(): Promise<SqliteDatabase> {
+  const db = await SqliteDatabase.create(':memory:');
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
@@ -81,7 +81,7 @@ function createTestDb(): Database.Database {
 }
 
 function insertTestNode(
-  db: Database.Database,
+  db: SqliteDatabase,
   opts: {
     id: string;
     content: string;
@@ -111,7 +111,7 @@ function insertTestNode(
 }
 
 function insertTestEdge(
-  db: Database.Database,
+  db: SqliteDatabase,
   opts: {
     id: string;
     sourceNodeId: string;
@@ -171,10 +171,10 @@ describe('EmbeddingService float32 methods', () => {
 // ── sqlite-vec Utilities ────────────────────────────────────────────
 
 describe('sqlite-vec utilities', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
   });
 
   afterEach(() => {
@@ -200,10 +200,10 @@ describe('sqlite-vec utilities', () => {
 // ── HybridSearch Pipeline Stage ─────────────────────────────────────
 
 describe('HybridSearch', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
   });
 
   afterEach(() => {
@@ -425,10 +425,10 @@ describe('HybridSearch', () => {
 // ── HybridSearch vecAvailable ───────────────────────────────────────
 
 describe('HybridSearch vecAvailable', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
   });
 
   afterEach(() => {
@@ -463,10 +463,10 @@ describe('HybridSearch vecAvailable', () => {
 // ── Graph BFS Expansion ─────────────────────────────────────────────
 
 describe('HybridSearch graph BFS', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
   });
 
   afterEach(() => {
@@ -613,10 +613,10 @@ describe('HybridSearch graph BFS', () => {
 // ── Fusion (FTS + Graph combined) ───────────────────────────────────
 
 describe('HybridSearch result fusion', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
   });
 
   afterEach(() => {
@@ -677,10 +677,10 @@ describe('HybridSearch result fusion', () => {
 // ── Direct search() method ──────────────────────────────────────────
 
 describe('HybridSearch.search()', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
   });
 
   afterEach(() => {

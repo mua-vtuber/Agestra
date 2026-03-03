@@ -10,6 +10,7 @@
  * without requiring a fully initialized MemoryFacade.
  */
 
+import { existsSync } from 'node:fs';
 import { SqliteDatabase } from './db-adapter.js';
 import { isVecTableAvailable } from './hybrid-search.js';
 
@@ -42,6 +43,18 @@ export interface RebuildResult {
  * be opened at all is reported as `status: "corrupted"`.
  */
 export async function checkIntegrity(dbPath: string): Promise<IntegrityResult> {
+  // sql.js creates an empty in-memory database for non-existent paths,
+  // so we must check the filesystem explicitly.
+  if (!existsSync(dbPath)) {
+    return {
+      status: 'corrupted',
+      details: [`Database file not found: ${dbPath}`],
+      nodeCount: 0,
+      edgeCount: 0,
+      ftsCount: 0,
+    };
+  }
+
   let db: SqliteDatabase | null = null;
 
   try {
@@ -110,6 +123,12 @@ export async function checkIntegrity(dbPath: string): Promise<IntegrityResult> {
  * Throws if the database cannot be opened.
  */
 export async function rebuildIndexes(dbPath: string): Promise<RebuildResult> {
+  // sql.js creates an empty in-memory database for non-existent paths,
+  // so we must check the filesystem explicitly.
+  if (!existsSync(dbPath)) {
+    throw new Error(`Database file not found: ${dbPath}`);
+  }
+
   const start = performance.now();
   const rebuiltIndexes: string[] = [];
 
@@ -178,7 +197,7 @@ function rebuildVecIndex(db: SqliteDatabase): void {
       `SELECT id, embedding FROM knowledge_nodes
        WHERE embedding IS NOT NULL AND deleted_at IS NULL`,
     )
-    .all() as Array<{ id: string; embedding: Buffer }>;
+    .all() as Array<{ id: string; embedding: Buffer | Uint8Array }>;
 
   // Clear existing vec data
   db.exec('DELETE FROM knowledge_vec');
@@ -191,10 +210,13 @@ function rebuildVecIndex(db: SqliteDatabase): void {
   const insertAll = db.transaction(() => {
     for (const node of nodes) {
       // Convert the stored float64 BLOB to float32 for vec0
+      const buf = Buffer.isBuffer(node.embedding)
+        ? node.embedding
+        : Buffer.from(node.embedding.buffer, node.embedding.byteOffset, node.embedding.byteLength);
       const float64 = new Float64Array(
-        node.embedding.buffer,
-        node.embedding.byteOffset,
-        node.embedding.byteLength / 8,
+        buf.buffer,
+        buf.byteOffset,
+        buf.byteLength / 8,
       );
       const float32 = new Float32Array(float64);
       insertStmt.run(node.id, Buffer.from(float32.buffer));

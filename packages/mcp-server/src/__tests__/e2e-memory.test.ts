@@ -74,7 +74,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should store knowledge nodes and retrieve them via search", async () => {
       const dbPath = join(tmpDir, "memory.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       try {
         // Store several knowledge nodes
@@ -123,7 +123,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should return empty results for non-matching queries", async () => {
       const dbPath = join(tmpDir, "empty-search.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       try {
         facade.store(createTestNode({
@@ -140,7 +140,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should handle deduplication correctly", async () => {
       const dbPath = join(tmpDir, "dedupe.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       try {
         const id1 = facade.store(createTestNode({
@@ -168,7 +168,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should return results ranked by relevance score", async () => {
       const dbPath = join(tmpDir, "ranked.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       try {
         // Store items with varying relevance to "TypeScript"
@@ -208,7 +208,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should respect limit parameter in search", async () => {
       const dbPath = join(tmpDir, "limited.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       try {
         // Store many items
@@ -228,7 +228,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should filter results by topic", async () => {
       const dbPath = join(tmpDir, "topic-filter.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       try {
         facade.store(createTestNode({
@@ -260,7 +260,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should return ok status for a healthy database", async () => {
       const dbPath = join(tmpDir, "healthy.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       // Store some data
       facade.store(createTestNode({ content: "Integrity test fact one" }));
@@ -280,7 +280,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should return ok for an empty database", async () => {
       const dbPath = join(tmpDir, "empty-integrity.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
       facade.close();
 
       const result = await checkIntegrity(dbPath);
@@ -299,7 +299,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should verify FTS count matches node count", async () => {
       const dbPath = join(tmpDir, "fts-count.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       const numNodes = 5;
       for (let i = 0; i < numNodes; i++) {
@@ -322,7 +322,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should rebuild indexes and search still works after", async () => {
       const dbPath = join(tmpDir, "rebuild.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       // Store data with content that matches well in FTS5
       facade.store(createTestNode({
@@ -352,7 +352,7 @@ describe("E2E: Memory Pipeline", () => {
 
       // Re-open and search after rebuild
       const facade2 = new MemoryFacade({ dbPath });
-      facade2.initialize();
+      await facade2.initialize();
 
       try {
         const afterResults = await facade2.search("JavaScript testing");
@@ -370,7 +370,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should rebuild indexes on empty database without error", async () => {
       const dbPath = join(tmpDir, "empty-rebuild.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
       facade.close();
 
       const result = await rebuildIndexes(dbPath);
@@ -381,7 +381,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should maintain integrity after rebuild", async () => {
       const dbPath = join(tmpDir, "integrity-after-rebuild.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       for (let i = 0; i < 5; i++) {
         facade.store(createTestNode({
@@ -407,7 +407,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should handle the complete store -> search -> integrity -> rebuild -> search cycle", async () => {
       const dbPath = join(tmpDir, "full-pipeline.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       // Step 1: Store knowledge
       facade.store(createTestNode({
@@ -457,7 +457,7 @@ describe("E2E: Memory Pipeline", () => {
 
       // Step 6: Post-rebuild search
       const facade2 = new MemoryFacade({ dbPath });
-      facade2.initialize();
+      await facade2.initialize();
 
       try {
         const postResults = await facade2.search("Turborepo monorepo");
@@ -479,7 +479,7 @@ describe("E2E: Memory Pipeline", () => {
         embeddingProvider: mockEmbeddingProvider,
         memoryConfig: { vectorEnabled: true },
       });
-      facade.initialize();
+      await facade.initialize();
 
       try {
         facade.store(createTestNode({
@@ -507,7 +507,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should retrieve a stored node by its ID", async () => {
       const dbPath = join(tmpDir, "getnode.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       try {
         const id = facade.store(createTestNode({
@@ -532,7 +532,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should return null for non-existent node ID", async () => {
       const dbPath = join(tmpDir, "nonode.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       try {
         const node = facade.getNode("nonexistent-uuid");
@@ -549,7 +549,7 @@ describe("E2E: Memory Pipeline", () => {
     it("should not return deleted nodes in search results", async () => {
       const dbPath = join(tmpDir, "delete.db");
       const facade = new MemoryFacade({ dbPath });
-      facade.initialize();
+      await facade.initialize();
 
       try {
         const id = facade.store(createTestNode({

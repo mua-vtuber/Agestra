@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
+import { SqliteDatabase } from '../db-adapter.js';
 import { MemoryEvolver } from '../evolver.js';
 import { EmbeddingService } from '../embedding-service.js';
 import type { MemoryConfig } from '../types.js';
@@ -7,8 +7,8 @@ import type { MemoryConfig } from '../types.js';
 // -- Test Helpers -----------------------------------------------------------
 
 /** Create an in-memory SQLite database with the required schema. */
-function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
+async function createTestDb(): Promise<SqliteDatabase> {
+  const db = await SqliteDatabase.create(':memory:');
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
@@ -83,7 +83,7 @@ function createTestDb(): Database.Database {
  * Optionally provide an embedding as a number array (will be serialized to blob).
  */
 function insertTestNode(
-  db: Database.Database,
+  db: SqliteDatabase,
   opts: {
     id: string;
     content: string;
@@ -148,10 +148,10 @@ function createMockEmbeddingService(available: boolean): EmbeddingService {
 // -- Tests ------------------------------------------------------------------
 
 describe('MemoryEvolver', () => {
-  let db: Database.Database;
+  let db: SqliteDatabase;
 
-  beforeEach(() => {
-    db = createTestDb();
+  beforeEach(async () => {
+    db = await createTestDb();
   });
 
   afterEach(() => {

@@ -37,7 +37,7 @@ export class PreparedStatement {
   }
 
   /** Fetch a single row as a plain object, or `undefined` if none. */
-  get(...params: unknown[]): Record<string, unknown> | undefined {
+  get(...params: unknown[]): unknown {
     const flat = params.length === 1 && Array.isArray(params[0])
       ? params[0]
       : params;
@@ -55,7 +55,7 @@ export class PreparedStatement {
   }
 
   /** Fetch all matching rows as an array of plain objects. */
-  all(...params: unknown[]): Record<string, unknown>[] {
+  all(...params: unknown[]): unknown[] {
     const flat = params.length === 1 && Array.isArray(params[0])
       ? params[0]
       : params;
