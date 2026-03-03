@@ -6,25 +6,11 @@ import type { AIProvider, HealthStatus, ProviderCapability } from "@agestra/core
 // ── Mock modules ─────────────────────────────────────────────
 
 const mockDetectProviders = vi.fn();
-const mockUpdateProvidersConfig = vi.fn().mockReturnValue({ action: "created", path: "providers.config.json" });
 const mockRegisterDetectedProviders = vi.fn();
 
 vi.mock("../tools/provider-detector.js", () => ({
   detectProviders: (...args: unknown[]) => mockDetectProviders(...args),
-  updateProvidersConfig: (...args: unknown[]) => mockUpdateProvidersConfig(...args),
   registerDetectedProviders: (...args: unknown[]) => mockRegisterDetectedProviders(...args),
-}));
-
-const mockGenerateClaudeMdSection = vi.fn().mockReturnValue("## Agestra section");
-const mockGenerateHooksConfig = vi.fn().mockReturnValue({ SessionStart: [] });
-const mockUpdateClaudeMd = vi.fn().mockReturnValue({ action: "created", path: "CLAUDE.md" });
-const mockUpdateHooks = vi.fn().mockReturnValue({ action: "created", path: "settings.local.json" });
-
-vi.mock("../tools/config-generator.js", () => ({
-  generateClaudeMdSection: (...args: unknown[]) => mockGenerateClaudeMdSection(...args),
-  generateHooksConfig: (...args: unknown[]) => mockGenerateHooksConfig(...args),
-  updateClaudeMd: (...args: unknown[]) => mockUpdateClaudeMd(...args),
-  updateHooks: (...args: unknown[]) => mockUpdateHooks(...args),
 }));
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -98,12 +84,7 @@ describe("autoDetectIfNeeded", () => {
 
     expect(result.detected).toBe(1);
     expect(mockDetectProviders).toHaveBeenCalled();
-    expect(mockUpdateProvidersConfig).toHaveBeenCalledWith("/tmp/test", expect.any(Array), false);
     expect(mockRegisterDetectedProviders).toHaveBeenCalledWith(detected, registry);
-    expect(mockGenerateClaudeMdSection).toHaveBeenCalledWith(registry);
-    expect(mockUpdateClaudeMd).toHaveBeenCalled();
-    expect(mockGenerateHooksConfig).toHaveBeenCalled();
-    expect(mockUpdateHooks).toHaveBeenCalled();
   });
 
   it("should return 0 when no providers are available", async () => {
@@ -116,7 +97,7 @@ describe("autoDetectIfNeeded", () => {
     const result = await autoDetectIfNeeded(registry, "/tmp/test", log);
 
     expect(result.detected).toBe(0);
-    expect(mockUpdateProvidersConfig).not.toHaveBeenCalled();
+    expect(mockRegisterDetectedProviders).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith(expect.stringContaining("no available providers"));
   });
 
@@ -131,21 +112,21 @@ describe("autoDetectIfNeeded", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining("network failure"));
   });
 
-  it("should generate config files on successful detection", async () => {
+  it("should register multiple detected providers", async () => {
     const registry = createMockRegistry();
+    const detected = [mockProvider("ollama"), mockProvider("gemini")];
     mockDetectProviders.mockResolvedValue({
       results: [
         { id: "ollama", type: "ollama", available: true },
         { id: "gemini", type: "gemini-cli", available: true },
       ],
-      providers: [mockProvider("ollama"), mockProvider("gemini")],
+      providers: detected,
     });
 
     const result = await autoDetectIfNeeded(registry, "/my/project", log);
 
     expect(result.detected).toBe(2);
-    expect(mockUpdateProvidersConfig).toHaveBeenCalledWith("/my/project", expect.any(Array), false);
-    expect(mockUpdateClaudeMd).toHaveBeenCalledWith("/my/project", expect.any(String), false);
-    expect(mockUpdateHooks).toHaveBeenCalledWith("/my/project", expect.any(Object), false);
+    expect(mockDetectProviders).toHaveBeenCalled();
+    expect(mockRegisterDetectedProviders).toHaveBeenCalledWith(detected, registry);
   });
 });

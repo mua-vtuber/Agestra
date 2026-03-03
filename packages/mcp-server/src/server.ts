@@ -16,9 +16,7 @@ import * as workspace from "./tools/workspace.js";
 import * as providerManage from "./tools/provider-manage.js";
 import * as ollamaManage from "./tools/ollama-manage.js";
 import * as memory from "./tools/memory.js";
-import * as health from "./tools/health.js";
 import * as jobs from "./tools/jobs.js";
-import * as configGen from "./tools/config-generator.js";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -57,9 +55,7 @@ const TOOL_MODULES: ToolModule[] = [
   providerManage,
   ollamaManage,
   memory,
-  health,
   jobs,
-  configGen,
 ];
 
 // ── Collect all tool definitions ──────────────────────────────

@@ -136,9 +136,9 @@ function createDeps(
 
 describe("server", () => {
   describe("collectTools", () => {
-    it("should return exactly 31 tool definitions", () => {
+    it("should return exactly 28 tool definitions", () => {
       const tools = collectTools();
-      expect(tools).toHaveLength(31);
+      expect(tools).toHaveLength(28);
     });
 
     it("should have unique tool names", () => {
@@ -187,15 +187,9 @@ describe("server", () => {
       expect(names).toContain("memory_context");
       expect(names).toContain("memory_add_edge");
 
-      // health tool (1)
-      expect(names).toContain("agestra_setup");
-
       // jobs tools (2)
       expect(names).toContain("cli_job_submit");
       expect(names).toContain("cli_job_status");
-
-      // config-generator tools (1)
-      expect(names).toContain("agestra_generate_config");
     });
 
     it("should have valid inputSchema for each tool", () => {
@@ -236,14 +230,6 @@ describe("server", () => {
       expect(result.content[0].text).toContain("Registered Providers");
       expect(result.content[0].text).toContain("ollama");
       expect(result.content[0].text).toContain("gemini");
-    });
-
-    it("should dispatch agestra_setup to the health handler", async () => {
-      const result = await dispatch("agestra_setup", {}, deps);
-
-      expect(result.isError).toBeUndefined();
-      expect(result.content).toHaveLength(1);
-      expect(result.content[0].text).toContain("Setup Report");
     });
 
     it("should dispatch memory_search to the memory handler", async () => {

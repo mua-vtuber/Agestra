@@ -20,15 +20,8 @@ import { MemoryFacade } from "@agestra/memory";
 import { createServer, connectStdio } from "./server.js";
 import {
   detectProviders,
-  updateProvidersConfig,
   registerDetectedProviders,
 } from "./tools/provider-detector.js";
-import {
-  generateClaudeMdSection,
-  generateHooksConfig,
-  updateClaudeMd,
-  updateHooks,
-} from "./tools/config-generator.js";
 
 // ── Re-exports for library usage ──────────────────────────────
 
@@ -84,17 +77,8 @@ export async function autoDetectIfNeeded(
       return { detected: 0 };
     }
 
-    // Write providers.config.json
-    updateProvidersConfig(baseDir, results, false);
-
     // Register into live registry
     registerDetectedProviders(providers, registry);
-
-    // Generate and write CLAUDE.md section + hooks
-    const section = generateClaudeMdSection(registry);
-    updateClaudeMd(baseDir, section, false);
-    const hooks = generateHooksConfig();
-    updateHooks(baseDir, hooks, false);
 
     log(`Auto-detected ${available.length} provider(s): ${available.map((r) => r.id).join(", ")}`);
     return { detected: available.length };
