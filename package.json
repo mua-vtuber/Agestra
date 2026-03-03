@@ -18,6 +18,7 @@
     "lint": "turbo lint",
     "clean": "turbo clean"
   },
+  "license": "GPL-3.0-only",
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@types/node": "^20.0.0",

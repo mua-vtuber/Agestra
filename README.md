@@ -240,4 +240,4 @@ At least one provider must be installed for the server to be useful.
 
 ## License
 
-MIT
+GPL-3.0

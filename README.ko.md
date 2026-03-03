@@ -240,4 +240,4 @@ agestra/
 
 ## 라이선스
 
-MIT
+GPL-3.0
