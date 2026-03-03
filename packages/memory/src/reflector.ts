@@ -12,7 +12,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type Database from 'better-sqlite3';
+import type { SqliteDatabase } from './db-adapter.js';
 import type { MemoryConfig, MemoryTopic, ReflectionResult } from './types.js';
 import { DEFAULT_MEMORY_CONFIG } from './types.js';
 import { getMemoryEventBus } from './event-bus.js';
@@ -65,12 +65,12 @@ If no meaningful insights can be drawn, return: []`;
  * knowledge nodes with `node_type = 'insight'` and `source = 'reflection'`.
  */
 export class ReflectionEngine {
-  private readonly db: Database.Database;
+  private readonly db: SqliteDatabase;
   private readonly llmFn: ReflectionLlmFn;
   private readonly config: MemoryConfig;
 
   constructor(
-    db: Database.Database,
+    db: SqliteDatabase,
     llmFn: ReflectionLlmFn,
     config?: Partial<MemoryConfig>,
   ) {

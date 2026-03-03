@@ -7,10 +7,10 @@
  * Delegates search logic to the existing HybridSearch class and
  * provides convenience methods (getNode, getPinnedNodes, search).
  *
- * Accepts a better-sqlite3 Database instance directly (no IPC).
+ * Accepts a SqliteDatabase instance directly (no IPC).
  */
 
-import type Database from 'better-sqlite3';
+import type { SqliteDatabase } from './db-adapter.js';
 import type {
   KnowledgeNode,
   MemoryConfig,
@@ -39,7 +39,7 @@ export class MemoryRetriever {
   private readonly config: MemoryConfig;
 
   constructor(
-    db: Database.Database,
+    db: SqliteDatabase,
     config?: Partial<MemoryConfig>,
     embeddingService?: EmbeddingService,
   ) {

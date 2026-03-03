@@ -19,7 +19,7 @@
  *   - FTS5 + graph BFS still work normally
  */
 
-import type Database from 'better-sqlite3';
+import type { SqliteDatabase } from './db-adapter.js';
 import type {
   KnowledgeNode,
   MemoryConfig,
@@ -43,7 +43,7 @@ import { EmbeddingService } from './embedding-service.js';
  * successfully created. Cached per-call -- the caller should
  * cache the result if checking frequently.
  */
-export function isVecTableAvailable(db: Database.Database): boolean {
+export function isVecTableAvailable(db: SqliteDatabase): boolean {
   try {
     const row = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_vec'",
@@ -62,7 +62,7 @@ export function isVecTableAvailable(db: Database.Database): boolean {
  *
  * @param dimension - Embedding vector dimension (default 1536 for OpenAI).
  */
-export function tryInitVecTable(db: Database.Database, dimension = 1536): boolean {
+export function tryInitVecTable(db: SqliteDatabase, dimension = 1536): boolean {
   try {
     db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
@@ -83,7 +83,7 @@ export function tryInitVecTable(db: Database.Database, dimension = 1536): boolea
  * Uses DELETE + INSERT since vec0 doesn't support INSERT OR REPLACE.
  */
 export function upsertVecEmbedding(
-  db: Database.Database,
+  db: SqliteDatabase,
   nodeId: string,
   float32Blob: Buffer,
 ): void {
@@ -96,7 +96,7 @@ export function upsertVecEmbedding(
 /**
  * Remove a node's embedding from the knowledge_vec table.
  */
-export function deleteVecEmbedding(db: Database.Database, nodeId: string): void {
+export function deleteVecEmbedding(db: SqliteDatabase, nodeId: string): void {
   db.prepare('DELETE FROM knowledge_vec WHERE node_id = ?').run(nodeId);
 }
 
@@ -109,7 +109,7 @@ export function deleteVecEmbedding(db: Database.Database, nodeId: string): void 
  * @returns Number of embeddings synced.
  */
 export function syncAllEmbeddingsToVec(
-  db: Database.Database,
+  db: SqliteDatabase,
   vectorToFloat32: (blob: Buffer) => Buffer,
 ): number {
   const rows = db.prepare(
@@ -204,19 +204,19 @@ interface ScoredEntry {
 /**
  * Pipeline stage that performs hybrid search (FTS5 + Vector + Graph).
  *
- * Accepts a better-sqlite3 Database instance and an optional EmbeddingService.
+ * Accepts a SqliteDatabase instance and an optional EmbeddingService.
  * Performs direct database queries for FTS5, graph BFS, and optionally
  * vector search (when sqlite-vec is available).
  */
 export class HybridSearch implements PipelineStage<RetrievalPipelineData, RetrievalPipelineData> {
   readonly name = 'HybridSearch';
-  private readonly db: Database.Database;
+  private readonly db: SqliteDatabase;
   private readonly config: MemoryConfig;
   private embeddingService: EmbeddingService | null;
   private _vecAvailable: boolean | null = null;
 
   constructor(
-    db: Database.Database,
+    db: SqliteDatabase,
     config?: Partial<MemoryConfig>,
     embeddingService?: EmbeddingService,
   ) {

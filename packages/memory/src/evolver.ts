@@ -12,7 +12,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type Database from 'better-sqlite3';
+import type { SqliteDatabase } from './db-adapter.js';
 import type { MemoryConfig, EvolutionResult } from './types.js';
 import { DEFAULT_MEMORY_CONFIG } from './types.js';
 import { EmbeddingService } from './embedding-service.js';
@@ -36,12 +36,12 @@ interface PruneCandidateRow {
  * Structural memory evolution: merge duplicates and prune stale nodes.
  */
 export class MemoryEvolver {
-  private readonly db: Database.Database;
+  private readonly db: SqliteDatabase;
   private readonly embeddingService: EmbeddingService;
   private readonly config: MemoryConfig;
 
   constructor(
-    db: Database.Database,
+    db: SqliteDatabase,
     embeddingService: EmbeddingService,
     config?: Partial<MemoryConfig>,
   ) {

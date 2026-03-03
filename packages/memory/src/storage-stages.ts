@@ -6,7 +6,7 @@
  */
 
 import { randomUUID, createHash } from 'node:crypto';
-import type Database from 'better-sqlite3';
+import type { SqliteDatabase } from './db-adapter.js';
 import type { ExtractionItem, MemoryConfig } from './types.js';
 import { DEFAULT_MEMORY_CONFIG } from './types.js';
 import type { PipelineStage, AnnotatedMessage } from './pipeline.js';
@@ -94,10 +94,10 @@ export class ProviderTagger implements PipelineStage<StoragePipelineData, Storag
  */
 export class ReMentionDetector implements PipelineStage<StoragePipelineData, StoragePipelineData> {
   readonly name = 'ReMentionDetector';
-  private readonly db: Database.Database;
+  private readonly db: SqliteDatabase;
   private readonly config: MemoryConfig;
 
-  constructor(db: Database.Database, config?: Partial<MemoryConfig>) {
+  constructor(db: SqliteDatabase, config?: Partial<MemoryConfig>) {
     this.db = db;
     this.config = { ...DEFAULT_MEMORY_CONFIG, ...config };
   }
@@ -165,9 +165,9 @@ export class ReMentionDetector implements PipelineStage<StoragePipelineData, Sto
  */
 export class ConflictChecker implements PipelineStage<StoragePipelineData, StoragePipelineData> {
   readonly name = 'ConflictChecker';
-  private readonly db: Database.Database;
+  private readonly db: SqliteDatabase;
 
-  constructor(db: Database.Database) {
+  constructor(db: SqliteDatabase) {
     this.db = db;
   }
 
@@ -261,10 +261,10 @@ export class ConflictChecker implements PipelineStage<StoragePipelineData, Stora
  */
 export class StorageStage implements PipelineStage<StoragePipelineData, StorageResult> {
   readonly name = 'StorageStage';
-  private readonly db: Database.Database;
+  private readonly db: SqliteDatabase;
   private readonly config: MemoryConfig;
 
-  constructor(db: Database.Database, config?: Partial<MemoryConfig>) {
+  constructor(db: SqliteDatabase, config?: Partial<MemoryConfig>) {
     this.db = db;
     this.config = { ...DEFAULT_MEMORY_CONFIG, ...config };
   }

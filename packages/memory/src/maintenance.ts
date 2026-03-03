@@ -10,7 +10,7 @@
  * without requiring a fully initialized MemoryFacade.
  */
 
-import Database from 'better-sqlite3';
+import { SqliteDatabase } from './db-adapter.js';
 import { isVecTableAvailable } from './hybrid-search.js';
 
 // ── Result Types ────────────────────────────────────────────────────
@@ -42,13 +42,13 @@ export interface RebuildResult {
  * be opened at all is reported as `status: "corrupted"`.
  */
 export async function checkIntegrity(dbPath: string): Promise<IntegrityResult> {
-  let db: Database.Database | null = null;
+  let db: SqliteDatabase | null = null;
 
   try {
-    db = new Database(dbPath, { readonly: true });
+    db = await SqliteDatabase.create(dbPath);
 
     // 1. Run PRAGMA integrity_check
-    const integrityRows = db.pragma('integrity_check') as Array<{
+    const integrityRows = db.prepare('PRAGMA integrity_check').all() as Array<{
       integrity_check: string;
     }>;
     const details = integrityRows.map((r) => r.integrity_check);
@@ -113,7 +113,7 @@ export async function rebuildIndexes(dbPath: string): Promise<RebuildResult> {
   const start = performance.now();
   const rebuiltIndexes: string[] = [];
 
-  const db = new Database(dbPath);
+  const db = await SqliteDatabase.create(dbPath);
 
   try {
     // 1. Rebuild FTS5 index
@@ -156,7 +156,7 @@ export async function rebuildIndexes(dbPath: string): Promise<RebuildResult> {
 /**
  * Count rows in a table. Returns 0 if the table doesn't exist.
  */
-function countRows(db: Database.Database, tableName: string): number {
+function countRows(db: SqliteDatabase, tableName: string): number {
   try {
     const row = db
       .prepare(`SELECT COUNT(*) AS cnt FROM ${tableName}`)
@@ -171,7 +171,7 @@ function countRows(db: Database.Database, tableName: string): number {
  * Rebuild the sqlite-vec knowledge_vec index by clearing and
  * re-inserting all embeddings from knowledge_nodes.
  */
-function rebuildVecIndex(db: Database.Database): void {
+function rebuildVecIndex(db: SqliteDatabase): void {
   // Read all node embeddings
   const nodes = db
     .prepare(
