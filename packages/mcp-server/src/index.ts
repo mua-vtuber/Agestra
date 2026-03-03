@@ -18,6 +18,17 @@ import { DocumentManager } from "@agestra/workspace";
 import { MemoryFacade } from "@agestra/memory";
 
 import { createServer, connectStdio } from "./server.js";
+import {
+  detectProviders,
+  updateProvidersConfig,
+  registerDetectedProviders,
+} from "./tools/provider-detector.js";
+import {
+  generateClaudeMdSection,
+  generateHooksConfig,
+  updateClaudeMd,
+  updateHooks,
+} from "./tools/config-generator.js";
 
 // ── Re-exports for library usage ──────────────────────────────
 
@@ -49,6 +60,49 @@ const factories: Record<string, (pc: { id: string; config?: Record<string, unkno
       timeout: pc.config?.timeout as number | undefined,
     }),
 };
+
+// ── Auto-detect ──────────────────────────────────────────────
+
+export async function autoDetectIfNeeded(
+  registry: InstanceType<typeof ProviderRegistry>,
+  baseDir: string,
+  log: (msg: string) => void,
+): Promise<{ detected: number }> {
+  if (registry.getAll().length > 0) {
+    log("Providers already registered, skipping auto-detect.");
+    return { detected: 0 };
+  }
+
+  log("No providers found — running auto-detect...");
+
+  try {
+    const { results, providers } = await detectProviders();
+    const available = results.filter((r) => r.available);
+
+    if (available.length === 0) {
+      log("Auto-detect found no available providers.");
+      return { detected: 0 };
+    }
+
+    // Write providers.config.json
+    updateProvidersConfig(baseDir, results, false);
+
+    // Register into live registry
+    registerDetectedProviders(providers, registry);
+
+    // Generate and write CLAUDE.md section + hooks
+    const section = generateClaudeMdSection(registry);
+    updateClaudeMd(baseDir, section, false);
+    const hooks = generateHooksConfig();
+    updateHooks(baseDir, hooks, false);
+
+    log(`Auto-detected ${available.length} provider(s): ${available.map((r) => r.id).join(", ")}`);
+    return { detected: available.length };
+  } catch (err) {
+    log(`Auto-detect failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+    return { detected: 0 };
+  }
+}
 
 // ── Main ──────────────────────────────────────────────────────
 
@@ -94,11 +148,15 @@ async function main(): Promise<void> {
     }
   }
 
-  // 3. Create supporting services
+  // 2b. Auto-detect if registry is empty
   const baseDir = process.cwd();
+  await autoDetectIfNeeded(registry, baseDir, log);
+
+  // 3. Create supporting services
   const sessionManager = new SessionManager(join(baseDir, ".agestra/sessions"));
   const documentManager = new DocumentManager(join(baseDir, ".agestra/workspace"));
   const memoryFacade = new MemoryFacade({ dbPath: join(baseDir, ".agestra/memory.db") });
+  await memoryFacade.initialize();
   const jobManager = new JobManager(baseDir);
 
   // 4. Create and connect MCP server
