@@ -1,0 +1,27 @@
+{
+  "name": "@agestra/mcp-server",
+  "version": "4.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@agestra/core": "*",
+    "@agestra/provider-ollama": "*",
+    "@agestra/provider-gemini": "*",
+    "@agestra/provider-codex": "*",
+    "@agestra/agents": "*",
+    "@agestra/workspace": "*",
+    "@agestra/memory": "*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vitest": "^2.1.9"
+  }
+}

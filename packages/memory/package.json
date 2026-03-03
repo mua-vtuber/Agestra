@@ -1,0 +1,22 @@
+{
+  "name": "@agestra/memory",
+  "version": "4.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@agestra/core": "*",
+    "better-sqlite3": "^11.0.0",
+    "js-tiktoken": "^1.0.21"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "typescript": "^5.0.0",
+    "vitest": "^2.1.9"
+  }
+}

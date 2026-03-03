@@ -1,0 +1,34 @@
+{
+  "defaultProvider": "gemini",
+  "selectionPolicy": "default-only",
+  "providers": [
+    {
+      "id": "ollama",
+      "type": "ollama",
+      "enabled": false,
+      "executionPolicy": "workspace-write",
+      "config": {
+        "host": "http://localhost:11434",
+        "defaultModel": "auto"
+      }
+    },
+    {
+      "id": "gemini",
+      "type": "gemini-cli",
+      "enabled": true,
+      "executionPolicy": "read-only",
+      "config": {
+        "timeout": 120000
+      }
+    },
+    {
+      "id": "codex",
+      "type": "codex-cli",
+      "enabled": true,
+      "executionPolicy": "read-only",
+      "config": {
+        "timeout": 120000
+      }
+    }
+  ]
+}
