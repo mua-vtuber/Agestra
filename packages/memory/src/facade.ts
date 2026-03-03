@@ -8,12 +8,12 @@
  *   - Evolve (merge similar, prune stale)
  *   - Reflect (LLM insight synthesis)
  *
- * Electron-free: accepts a dbPath and creates its own better-sqlite3
+ * Electron-free: accepts a dbPath and creates its own sql.js (WASM)
  * connection. All services are injected at construction time via config.
  */
 
 import { randomUUID, createHash } from 'node:crypto';
-import Database from 'better-sqlite3';
+import { SqliteDatabase } from './db-adapter.js';
 import type {
   KnowledgeNode,
   KnowledgeNodeCreate,
@@ -147,7 +147,7 @@ const SCHEMA_SQL = `
  * Owns its SQLite connection and all sub-services.
  */
 export class MemoryFacade {
-  private db: Database.Database | null = null;
+  private db: SqliteDatabase | null = null;
   private readonly dbPath: string;
   private readonly config: MemoryConfig;
   private readonly embeddingProvider: EmbeddingProvider | null;
@@ -188,14 +188,14 @@ export class MemoryFacade {
   /**
    * Initialize the memory system.
    *
-   * Creates the SQLite database, sets up tables/triggers/FTS5,
+   * Creates the SQLite database (via sql.js WASM), sets up tables/triggers/FTS5,
    * and wires all sub-services.
    */
-  initialize(): void {
+  async initialize(): Promise<void> {
     if (this.initialized) return;
 
     // Create database connection
-    this.db = new Database(this.dbPath);
+    this.db = await SqliteDatabase.create(this.dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
 
@@ -594,7 +594,7 @@ export class MemoryFacade {
    * Exposed for sub-modules and tests that need direct DB access.
    * Returns null if not initialized.
    */
-  getDatabase(): Database.Database | null {
+  getDatabase(): SqliteDatabase | null {
     return this.db;
   }
 
