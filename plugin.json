@@ -1,0 +1,11 @@
+{
+  "name": "agestra",
+  "version": "4.0.0",
+  "description": "Multi-AI provider integration — connect Ollama, Gemini, and Codex with Claude for debates, analysis, and cross-validation",
+  "mcpServers": {
+    "agestra": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/bundle.js"]
+    }
+  }
+}
