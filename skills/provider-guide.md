@@ -65,12 +65,14 @@ Match by **semantic intent**, not literal keywords. These triggers apply in any 
 
 ### Hook-Triggered Choice
 
-When an `AGESTRA_SUGGESTION` marker appears from the UserPromptSubmit hook, present two choices:
+When an `AGESTRA_SUGGESTION` marker appears from the UserPromptSubmit hook, present these choices:
 
-1. Claude Code handles it alone
-2. Multi-AI analysis (parallel processing with available providers)
+1. **Claude only** — Claude Code handles it alone
+2. **Compare** — Send the same prompt to multiple AIs, compare responses (`ai_compare`)
+3. **Debate** — AIs discuss until consensus is reached (`agent_debate_start`)
+4. **Other** — User specifies the approach
 
-If no providers are available, skip the choice and proceed directly.
+Present choices in the user's language. If no providers are available, skip and proceed directly.
 
 ## Error Handling — 429 Rate Limit
 
