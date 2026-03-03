@@ -1,27 +1,28 @@
 # Agestra
 
-**Agent + Orchestra** — 여러 AI 공급자를 Claude Code에서 오케스트레이션하는 MCP 서버.
+**Agent + Orchestra** — 여러 AI 공급자를 Claude Code에서 오케스트레이션하는 플러그인.
 
 [English](README.md) | [한국어](README.ko.md)
 
-Agestra는 Ollama(로컬), Gemini CLI, Codex CLI를 Claude Code에 플러그형으로 연결합니다. 멀티에이전트 토론, 병렬 작업 분배, 교차 검증, 지속적 GraphRAG 메모리 시스템을 31개 MCP 도구로 제공합니다.
+Agestra는 Ollama(로컬), Gemini CLI, Codex CLI를 Claude Code에 플러그형으로 연결합니다. 멀티에이전트 토론, 병렬 작업 분배, 교차 검증, 지속적 GraphRAG 메모리 시스템을 28개 MCP 도구로 제공합니다.
 
 ## 빠른 시작
 
 ```bash
-git clone https://github.com/mua-vtuber/agestra.git
-cd agestra
-npm install
-npm run build
+claude plugin add agestra
 ```
 
-Claude Code에 등록:
+끝. Agestra가 첫 사용 시 사용 가능한 공급자(Ollama, Gemini CLI, Codex CLI)를 자동 감지합니다.
 
-```bash
-claude mcp add agestra node $(pwd)/packages/mcp-server/dist/index.js
-```
+### 사전 요구사항
 
-이후 Claude에게 `agestra_setup` 실행을 요청하세요. 공급자 자동 감지, 설정 생성, `CLAUDE.md` + 훅 설정까지 한 번에 완료합니다.
+최소 하나의 AI 공급자가 설치되어야 합니다:
+
+| 공급자 | 설치 | 유형 |
+|--------|------|------|
+| [Ollama](https://ollama.com/) | `curl -fsSL https://ollama.com/install.sh \| sh` | 로컬 LLM |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm install -g @google/gemini-cli` | 클라우드 |
+| [Codex CLI](https://github.com/openai/codex) | `npm install -g @openai/codex` | 클라우드 |
 
 ---
 
@@ -38,20 +39,20 @@ Turborepo 모노레포, 8개 패키지:
 | `@agestra/agents` | 토론 엔진, 작업 분배기, 교차 검증기, 세션 관리자 |
 | `@agestra/workspace` | 코드 리뷰 워크플로우용 문서 관리자 |
 | `@agestra/memory` | GraphRAG — FTS5 + 벡터 + 지식 그래프 하이브리드 검색, 실패 추적 |
-| `@agestra/mcp-server` | MCP 프로토콜 레이어, 31개 도구, 디스패치, 설정 생성 |
+| `@agestra/mcp-server` | MCP 프로토콜 레이어, 28개 도구, 디스패치 |
 
 ### 설계 원칙
 
 - **공급자 추상화** — 모든 백엔드가 `AIProvider`(`chat`, `healthCheck`, `getCapabilities`)를 구현. 기존 코드 수정 없이 새 공급자 추가 가능.
-- **설정 기반** — `providers.config.json`에 활성 공급자 선언. 레지스트리가 런타임에 로드·노출.
+- **제로 설정** — 시작 시 공급자를 자동 감지. 수동 설정 불필요.
+- **플러그인 네이티브** — Claude Code 플러그인으로 설치. Skills, hooks, MCP 서버가 함께 번들.
 - **모듈형 디스패치** — 각 도구 카테고리가 `getTools()` + `handleTool()`을 내보내는 독립 모듈. 서버가 동적으로 수집·디스패치.
 - **원자적 쓰기** — 모든 파일 연산이 임시 파일 → rename 방식. 크래시 시 손상 방지.
 - **실패 추적** — 실패한 접근법이 GraphRAG에 자동 기록, 이후 프롬프트에 주입.
-- **동적 능력 판단** — Ollama 모델은 파라미터 수(파일 크기 기반 추정)로 평가. 클라우드 공급자는 항상 에이전트 등급.
 
 ---
 
-## 도구 (31개)
+## 도구 (28개)
 
 ### AI 채팅 (3개)
 
@@ -68,7 +69,7 @@ Turborepo 모노레포, 8개 패키지:
 | `agent_debate_start` | 다중 공급자 토론 시작 (논블로킹, 품질 루프 + 검증자 옵션) |
 | `agent_debate_status` | 토론 상태 및 트랜스크립트 확인 |
 | `agent_debate_create` | 턴 기반 토론 세션 생성 (토론 ID 반환) |
-| `agent_debate_turn` | 공급자 1턴 실행; Claude 코멘트 주입 가능 |
+| `agent_debate_turn` | 공급자 1턴 실행; `provider: "claude"`로 Claude 독립 참여 지원 |
 | `agent_debate_conclude` | 토론 종료 및 최종 트랜스크립트 생성 |
 | `agent_assign_task` | 특정 공급자에게 작업 위임 |
 | `agent_task_status` | 작업 완료 상태 및 결과 확인 |
@@ -116,42 +117,13 @@ Turborepo 모노레포, 8개 패키지:
 | `cli_job_submit` | 장시간 CLI 작업을 백그라운드에 제출 |
 | `cli_job_status` | 작업 상태 확인 및 출력 조회 |
 
-### 설정 (3개)
-
-| 도구 | 설명 |
-|------|------|
-| `agestra_setup` | 원스톱: 공급자 감지, 상태 체크, CLAUDE.md + 훅 생성 |
-| `agestra_generate_config` | CLAUDE.md 섹션과 훅 재생성 (dry_run으로 미리보기) |
-| `agestra_remove` | agestra 생성 설정 전체 제거 (CLAUDE.md 섹션, 훅, providers.config.json) |
-
 ---
 
 ## 설정
 
-### MCP 서버 등록
+### providers.config.json (선택)
 
-**터미널에서** (Claude Code 밖):
-
-```bash
-claude mcp add agestra node $(pwd)/packages/mcp-server/dist/index.js
-```
-
-또는 `~/.claude/settings.json` 직접 편집:
-
-```json
-{
-  "mcpServers": {
-    "agestra": {
-      "command": "node",
-      "args": ["<PROJECT_ROOT>/packages/mcp-server/dist/index.js"]
-    }
-  }
-}
-```
-
-### providers.config.json
-
-`agestra_setup`이 자동 생성. 수동 편집도 가능.
+Agestra는 시작 시 공급자를 자동 감지합니다. 수동 제어가 필요하면 프로젝트 루트에 `providers.config.json`을 생성하세요:
 
 | 필드 | 설명 |
 |------|------|
@@ -159,20 +131,7 @@ claude mcp add agestra node $(pwd)/packages/mcp-server/dist/index.js
 | `providers[].id` | 고유 식별자 |
 | `providers[].type` | `ollama`, `gemini-cli`, `codex-cli` |
 | `providers[].enabled` | 시작 시 로드 여부 |
-| `providers[].executionPolicy` | `read-only`, `workspace-write`, `full-auto` |
 | `providers[].config` | 타입별 설정 (host, timeout 등) |
-
-`agestra_setup` 재실행 시 결과를 병합: `enabled` 갱신, 사용자 설정(host, timeout 등)은 보존.
-
-### 생성되는 파일
-
-| 파일 | 용도 |
-|------|------|
-| `providers.config.json` | 공급자 선언 (자동 감지) |
-| `CLAUDE.md` | 사용 가이드라인, 능력 티어, 워크플로우, 완료 체크리스트 |
-| `.claude/settings.local.json` | 훅 — 세션 시작, 커밋 리뷰, 위임 제안, 완료 검증 |
-
-섹션은 버전 마커(`<!-- [agestra:v4.0.0] BEGIN/END -->`)로 감싸 안전하게 업데이트합니다.
 
 ### 런타임 데이터
 
@@ -190,8 +149,10 @@ claude mcp add agestra node $(pwd)/packages/mcp-server/dist/index.js
 ## 개발
 
 ```bash
+npm install        # 의존성 설치
 npm run build      # 전체 빌드 (Turborepo)
 npm test           # 전체 테스트 (Vitest)
+npm run bundle     # 단일 파일 플러그인 번들 (esbuild)
 npm run dev        # 워치 모드
 npm run lint       # 린트 (ESLint)
 npm run clean      # dist/ 삭제
@@ -201,40 +162,44 @@ npm run clean      # dist/ 삭제
 
 ```
 agestra/
+├── plugin.json              # Claude Code 플러그인 매니페스트
+├── skills/
+│   └── provider-guide.md    # 공급자 사용 가이드라인 (skill)
+├── hooks/
+│   ├── user-prompt-submit.md  # 도구 추천 hook
+│   └── stop.md                # 완료 검증 hook
+├── dist/
+│   └── bundle.js            # 단일 파일 MCP 서버 번들
+├── scripts/
+│   └── bundle.mjs           # esbuild 번들 스크립트
 ├── packages/
-│   ├── core/               # AIProvider 인터페이스, 레지스트리, 원자적 쓰기, 작업 큐
-│   ├── provider-ollama/    # Ollama HTTP 어댑터
-│   ├── provider-gemini/    # Gemini CLI 어댑터
-│   ├── provider-codex/     # Codex CLI 어댑터
-│   ├── agents/             # 토론 엔진, 분배기, 교차 검증기, 세션
-│   ├── workspace/          # 코드 리뷰 문서 관리자
-│   ├── memory/             # GraphRAG: 하이브리드 검색, 실패 추적, 컨텍스트 조립
-│   └── mcp-server/         # MCP 서버, 31개 도구, 디스패치, 설정 생성
-├── providers.config.json   # 공급자 설정
-├── package.json            # 워크스페이스 루트
-└── turbo.json              # Turborepo 파이프라인
+│   ├── core/                # AIProvider 인터페이스, 레지스트리
+│   ├── provider-ollama/     # Ollama HTTP 어댑터
+│   ├── provider-gemini/     # Gemini CLI 어댑터
+│   ├── provider-codex/      # Codex CLI 어댑터
+│   ├── agents/              # 토론 엔진, 분배기, 교차 검증기
+│   ├── workspace/           # 코드 리뷰 문서 관리자
+│   ├── memory/              # GraphRAG: 하이브리드 검색, 실패 추적
+│   └── mcp-server/          # MCP 서버, 28개 도구, 디스패치
+├── package.json             # 워크스페이스 루트
+└── turbo.json               # Turborepo 파이프라인
 ```
 
 ### 새 공급자 추가
 
 1. `packages/provider-<이름>/`에 `AIProvider` 구현.
 2. `packages/mcp-server/src/index.ts`에 팩토리 추가.
-3. `providers.config.json`에 공급자 블록 추가.
-4. `npm run build && npm test`
+3. `npm run build && npm test`
 
 ---
 
-## 요구사항
+## 제거
 
-| 의존성 | 필수 | 비고 |
-|--------|------|------|
-| Node.js 18+ | 예 | 런타임 |
-| npm | 예 | 워크스페이스 |
-| [Ollama](https://ollama.com/) | 아니오 | 로컬 LLM 공급자용 |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | 아니오 | Gemini 공급자용 |
-| [Codex CLI](https://github.com/openai/codex) | 아니오 | Codex 공급자용 |
+```bash
+claude plugin remove agestra
+```
 
-최소 하나의 공급자가 설치되어야 서버가 유용합니다.
+프로젝트에 잔여 파일 없음. 깔끔한 제거.
 
 ---
 

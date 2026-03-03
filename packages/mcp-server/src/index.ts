@@ -162,7 +162,8 @@ const isDirectRun =
   typeof process !== "undefined" &&
   process.argv[1] &&
   (process.argv[1].endsWith("/mcp-server/dist/index.js") ||
-   process.argv[1].endsWith("/mcp-server/src/index.ts"));
+   process.argv[1].endsWith("/mcp-server/src/index.ts") ||
+   process.argv[1].endsWith("/dist/bundle.js"));
 
 if (isDirectRun) {
   main().catch((err) => {
