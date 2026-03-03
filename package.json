@@ -1,24 +1,48 @@
 {
   "name": "agestra",
-  "version": "4.0.0",
-  "description": "MCP server with pluggable AI providers, multi-agent orchestration, and GraphRAG memory",
+  "version": "4.1.0",
+  "description": "Claude Code plugin — orchestrate Ollama, Gemini, and Codex for multi-AI debates, cross-validation, and GraphRAG memory",
   "type": "module",
   "packageManager": "npm@11.11.0",
   "workspaces": [
     "packages/*"
   ],
-  "main": "packages/mcp-server/dist/index.js",
+  "main": "dist/bundle.js",
   "bin": {
-    "agestra": "packages/mcp-server/dist/index.js"
+    "agestra": "dist/bundle.js"
   },
+  "files": [
+    "dist/bundle.js",
+    "dist/sql-wasm.js",
+    "dist/sql-wasm.wasm",
+    ".claude-plugin/",
+    "agents/",
+    "commands/",
+    "skills/"
+  ],
   "scripts": {
     "build": "turbo build",
     "test": "turbo test",
     "dev": "turbo dev",
     "lint": "turbo lint",
     "clean": "turbo clean",
-    "bundle": "node scripts/bundle.mjs"
+    "bundle": "node scripts/bundle.mjs",
+    "prepublishOnly": "npm run build && npm run bundle"
   },
+  "keywords": [
+    "claude-code-plugin",
+    "mcp",
+    "multi-ai",
+    "ollama",
+    "gemini",
+    "codex",
+    "ai-orchestration"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mua-vtuber/Agestra.git"
+  },
+  "homepage": "https://github.com/mua-vtuber/Agestra",
   "license": "GPL-3.0-only",
   "devDependencies": {
     "@eslint/js": "^9.39.2",
