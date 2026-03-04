@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ProviderRegistry, JobManager } from "@agestra/core";
+import type { TraceWriter } from "@agestra/core";
 import type { SessionManager } from "@agestra/agents";
 import type { DocumentManager } from "@agestra/workspace";
 import type { MemoryFacade } from "@agestra/memory";
@@ -79,6 +80,7 @@ export interface AgentToolDeps {
   memoryFacade: MemoryFacade;
   jobManager: JobManager;
   documentManager: DocumentManager;
+  traceWriter?: TraceWriter;
 }
 
 // Shared debate engine instance for turn-based debates
@@ -420,8 +422,23 @@ async function handleAssignTask(
 
   const prompt = `Task: ${parsed.task}${filesContext}\n\nPlease complete this task and provide your response.`;
 
+  const startTime = performance.now();
   try {
     const response = await provider.chat({ prompt });
+    const latencyMs = Math.round(performance.now() - startTime);
+
+    if (deps.traceWriter) {
+      deps.traceWriter.write({
+        traceId: session.id,
+        action: "chat",
+        providerId: parsed.provider,
+        task: parsed.task,
+        request: { promptSummary: prompt.slice(0, 100), fileCount: parsed.files?.length ?? 0 },
+        response: { success: true, charLength: response.text.length },
+        latencyMs,
+      });
+    }
+
     deps.sessionManager.completeSession(session.id, response.text);
 
     return {
@@ -433,8 +450,22 @@ async function handleAssignTask(
       ],
     };
   } catch (err) {
+    const latencyMs = Math.round(performance.now() - startTime);
     deps.sessionManager.updateSessionStatus(session.id, "failed");
     const message = err instanceof Error ? err.message : String(err);
+
+    if (deps.traceWriter) {
+      deps.traceWriter.write({
+        traceId: session.id,
+        action: "chat",
+        providerId: parsed.provider,
+        task: parsed.task,
+        request: { promptSummary: prompt.slice(0, 100), fileCount: parsed.files?.length ?? 0 },
+        response: { success: false, charLength: 0, error: message },
+        latencyMs,
+      });
+    }
+
     return {
       content: [
         {
@@ -694,7 +725,21 @@ async function handleDebateTurn(
 
   // Build prompt with full conversation history and call provider
   const prompt = debateEngine.buildPromptForProvider(parsed.debate_id, parsed.provider);
+  const startTime = performance.now();
   const response = await provider.chat({ prompt });
+  const latencyMs = Math.round(performance.now() - startTime);
+
+  if (deps.traceWriter) {
+    deps.traceWriter.write({
+      traceId: state.id,
+      action: "debate_turn",
+      providerId: parsed.provider,
+      task: state.topic,
+      request: { promptSummary: prompt.slice(0, 100), fileCount: 0 },
+      response: { success: true, charLength: response.text.length },
+      latencyMs,
+    });
+  }
 
   // Record provider's response as a turn
   debateEngine.addTurn(parsed.debate_id, parsed.provider, response.text);

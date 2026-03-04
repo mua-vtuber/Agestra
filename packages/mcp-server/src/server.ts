@@ -6,6 +6,7 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { ProviderRegistry, JobManager } from "@agestra/core";
+import type { TraceWriter } from "@agestra/core";
 import type { SessionManager } from "@agestra/agents";
 import type { DocumentManager } from "@agestra/workspace";
 import type { MemoryFacade } from "@agestra/memory";
@@ -26,6 +27,7 @@ export interface ServerDependencies {
   documentManager: DocumentManager;
   memoryFacade: MemoryFacade;
   jobManager: JobManager;
+  traceWriter?: TraceWriter;
 }
 
 interface McpToolResult {
@@ -134,6 +136,7 @@ export async function dispatch(
     documentManager: deps.documentManager,
     memoryFacade: deps.memoryFacade,
     jobManager: deps.jobManager,
+    traceWriter: deps.traceWriter,
   };
 
   const result = await mod.handleTool(toolName, args, moduleDeps);

@@ -9,6 +9,7 @@ import {
   parseProviderConfig,
   ProviderRegistry,
   JobManager,
+  TraceWriter,
 } from "@agestra/core";
 import { OllamaProvider } from "@agestra/provider-ollama";
 import { GeminiProvider } from "@agestra/provider-gemini";
@@ -147,6 +148,7 @@ async function main(): Promise<void> {
     log("Memory tools will be non-functional. Other tools work normally.");
   }
   const jobManager = new JobManager(baseDir);
+  const traceWriter = new TraceWriter(baseDir);
 
   // 4. Create and connect MCP server
   const server = createServer({
@@ -155,6 +157,7 @@ async function main(): Promise<void> {
     documentManager,
     memoryFacade,
     jobManager,
+    traceWriter,
   });
 
   log(`Starting MCP server with ${registry.getAll().length} provider(s)...`);
