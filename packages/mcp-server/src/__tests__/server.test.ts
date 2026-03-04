@@ -137,9 +137,9 @@ function createDeps(
 
 describe("server", () => {
   describe("collectTools", () => {
-    it("should return exactly 29 tool definitions", () => {
+    it("should return exactly 32 tool definitions", () => {
       const tools = collectTools();
-      expect(tools).toHaveLength(29);
+      expect(tools).toHaveLength(32);
     });
 
     it("should have unique tool names", () => {
@@ -191,6 +191,11 @@ describe("server", () => {
       // jobs tools (2)
       expect(names).toContain("cli_job_submit");
       expect(names).toContain("cli_job_status");
+
+      // trace tools (3)
+      expect(names).toContain("trace_query");
+      expect(names).toContain("trace_summary");
+      expect(names).toContain("trace_visualize");
     });
 
     it("should have valid inputSchema for each tool", () => {
