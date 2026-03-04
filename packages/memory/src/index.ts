@@ -18,4 +18,5 @@ export * from './evolver.js';
 export * from './reflector.js';
 export * from './llm-strategy.js';
 export * from './facade.js';
+export * from './session-cache.js';
 export * from './maintenance.js';

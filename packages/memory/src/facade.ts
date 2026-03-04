@@ -18,6 +18,7 @@ import type {
   KnowledgeNode,
   KnowledgeNodeCreate,
   MemoryConfig,
+  MemorySource,
   MemoryTopic,
   NodeType,
   RelationType,
@@ -52,6 +53,7 @@ import {
 import type { StorageResult } from './storage-stages.js';
 import type { RetrievalPipelineData } from './types.js';
 import { getMemoryEventBus } from './event-bus.js';
+import { SessionCache } from './session-cache.js';
 
 // ── Configuration ────────────────────────────────────────────────────
 
@@ -164,6 +166,7 @@ export class MemoryFacade {
   private evolver: MemoryEvolver | null = null;
   private reflector: ReflectionEngine | null = null;
   private extractionStrategy: ExtractionStrategy | null = null;
+  private sessionCache = new SessionCache();
   private initialized = false;
 
   constructor(facadeConfig: MemoryFacadeConfig) {
@@ -252,6 +255,7 @@ export class MemoryFacade {
     this.initialized = false;
     this._pendingEmbeddings = 0;
     this._failedEmbeddings = 0;
+    this.sessionCache = new SessionCache();
     this.retriever = null;
     this.extractor = null;
     this.assembler = null;
@@ -332,6 +336,41 @@ export class MemoryFacade {
     options?: { topic?: MemoryTopic; nodeType?: NodeType; limit?: number },
   ): Promise<RetrievalResult[]> {
     this.ensureInitialized();
+
+    // L1: Session cache (instant keyword match)
+    const cacheResults = this.sessionCache.search(query);
+    if (cacheResults.length > 0 && cacheResults[0].score >= 0.7) {
+      const limit = options?.limit ?? 10;
+      return cacheResults.slice(0, limit).map((r) => ({
+        node: {
+          id: `session-${Date.now()}`,
+          content: r.content,
+          nodeType: 'fact' as NodeType,
+          topic: 'context' as MemoryTopic,
+          importance: 0.5,
+          source: 'auto' as MemorySource,
+          pinned: false,
+          conversationId: r.sessionId,
+          messageId: null,
+          lastAccessed: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          embeddingVersion: null,
+          extractorVersion: null,
+          sourceHash: null,
+          dedupeKey: null,
+          deletedAt: null,
+          providerId: null,
+          lastMentionedAt: null,
+          mentionCount: 0,
+          confidence: r.score,
+        },
+        score: r.score,
+        source: 'fts' as const,
+      }));
+    }
+
+    // L2+L3: Existing hybrid search (vector + graph)
     return this.retriever!.search(query, options);
   }
 
@@ -530,6 +569,26 @@ export class MemoryFacade {
       .run(new Date().toISOString(), id);
 
     return result.changes > 0;
+  }
+
+  // ── Session Cache (L1 Tier) ──────────────────────────────────────
+
+  /**
+   * Add content to session cache (L1 memory tier).
+   */
+  addToSessionCache(sessionId: string, content: string): void {
+    this.sessionCache.add(sessionId, content);
+  }
+
+  /**
+   * Clear session cache entries.
+   */
+  clearSessionCache(sessionId?: string): void {
+    if (sessionId) {
+      this.sessionCache.clearSession(sessionId);
+    } else {
+      this.sessionCache.clear();
+    }
   }
 
   // ── Edge Operations ──────────────────────────────────────────────
