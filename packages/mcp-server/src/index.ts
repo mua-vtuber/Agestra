@@ -149,6 +149,7 @@ async function main(): Promise<void> {
   }
   const jobManager = new JobManager(baseDir);
   const traceWriter = new TraceWriter(baseDir);
+  traceWriter.cleanup(30); // Remove trace files older than 30 days
 
   // 4. Create and connect MCP server
   const server = createServer({
