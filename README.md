@@ -1,5 +1,8 @@
 # Agestra
 
+[![npm version](https://img.shields.io/npm/v/agestra.svg)](https://www.npmjs.com/package/agestra)
+[![license](https://img.shields.io/npm/l/agestra.svg)](LICENSE)
+
 **Agent + Orchestra** — A Claude Code plugin that orchestrates multiple AI providers.
 
 [English](README.md) | [한국어](README.ko.md)
@@ -9,7 +12,11 @@ Agestra connects Ollama (local), Gemini CLI, and Codex CLI to Claude Code as plu
 ## Quick Start
 
 ```bash
+# Install as Claude Code plugin
 claude plugin add agestra
+
+# Or install via npm
+npm install -g agestra
 ```
 
 That's it. Agestra auto-detects available providers (Ollama, Gemini CLI, Codex CLI) on first use.
@@ -229,7 +236,11 @@ agestra/
 ## Uninstall
 
 ```bash
+# If installed as plugin
 claude plugin remove agestra
+
+# If installed via npm
+npm uninstall -g agestra
 ```
 
 No residual files in your project. Clean removal.
@@ -238,4 +249,4 @@ No residual files in your project. Clean removal.
 
 ## License
 
-GPL-3.0
+[GPL-3.0](LICENSE)

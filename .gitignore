@@ -108,6 +108,9 @@ logs/
 # ===========================================
 # Secrets and Credentials (CRITICAL)
 # ===========================================
+# npm config (may contain auth tokens)
+.npmrc
+
 # Environment files
 .env
 .env.*
