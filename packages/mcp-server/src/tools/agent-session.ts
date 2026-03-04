@@ -70,6 +70,11 @@ const AgentDebateTurnSchema = z.object({
 const AgentDebateConcludeSchema = z.object({
   debate_id: z.string().describe("Debate session ID to conclude"),
   summary: z.string().optional().describe("Claude's final summary of the debate"),
+  quality_scores: z.array(z.object({
+    provider: z.string(),
+    score: z.number().min(0).max(1),
+    feedback: z.string(),
+  })).optional().describe("Quality assessment of each provider's contribution"),
 });
 
 // ── Types ────────────────────────────────────────────────────
@@ -269,12 +274,25 @@ export function getTools() {
     {
       name: "agent_debate_conclude",
       description:
-        "End a debate session and generate the final transcript. Optionally add Claude's summary.",
+        "End a debate session and generate the final transcript. Optionally add Claude's summary and quality scores for each provider.",
       inputSchema: {
         type: "object" as const,
         properties: {
           debate_id: { type: "string", description: "Debate session ID to conclude" },
           summary: { type: "string", description: "Claude's final summary of the debate" },
+          quality_scores: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                provider: { type: "string", description: "Provider ID" },
+                score: { type: "number", description: "Quality score from 0 to 1" },
+                feedback: { type: "string", description: "Quality feedback" },
+              },
+              required: ["provider", "score", "feedback"],
+            },
+            description: "Quality assessment of each provider's contribution",
+          },
         },
         required: ["debate_id"],
       },
@@ -810,6 +828,17 @@ async function handleDebateConclude(
 
   // Mark concluded
   debateEngine.conclude(parsed.debate_id);
+
+  // Write quality scores to trace if provided
+  if (parsed.quality_scores && deps.traceWriter) {
+    for (const qs of parsed.quality_scores) {
+      deps.traceWriter.updateQuality(state.id, qs.provider, {
+        score: qs.score,
+        evaluator: "claude",
+        feedback: qs.feedback,
+      });
+    }
+  }
 
   // Build transcript
   const transcript = debateEngine.buildTurnTranscript(parsed.debate_id);
