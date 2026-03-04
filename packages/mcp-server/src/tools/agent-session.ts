@@ -440,6 +440,14 @@ async function handleAssignTask(
 
   const prompt = `Task: ${parsed.task}${filesContext}\n\nPlease complete this task and provide your response.`;
 
+  // Build reasoning metadata for trace
+  const reasoning = deps.traceWriter ? {
+    candidateProviders: deps.registry.getAvailable().map((p) => p.id),
+    selectedProvider: parsed.provider,
+    selectionReason: `Explicitly requested provider: ${parsed.provider}`,
+    memoryHit: false,
+  } : undefined;
+
   const startTime = performance.now();
   try {
     const response = await provider.chat({ prompt });
@@ -454,6 +462,7 @@ async function handleAssignTask(
         request: { promptSummary: prompt.slice(0, 100), fileCount: parsed.files?.length ?? 0 },
         response: { success: true, charLength: response.text.length },
         latencyMs,
+        reasoning,
       });
     }
 
@@ -481,6 +490,7 @@ async function handleAssignTask(
         request: { promptSummary: prompt.slice(0, 100), fileCount: parsed.files?.length ?? 0 },
         response: { success: false, charLength: 0, error: message },
         latencyMs,
+        reasoning,
       });
     }
 
@@ -743,6 +753,15 @@ async function handleDebateTurn(
 
   // Build prompt with full conversation history and call provider
   const prompt = debateEngine.buildPromptForProvider(parsed.debate_id, parsed.provider);
+
+  // Build reasoning metadata for trace
+  const reasoning = deps.traceWriter ? {
+    candidateProviders: state.providerIds,
+    selectedProvider: parsed.provider,
+    selectionReason: `Debate turn: ${parsed.provider}'s turn to respond`,
+    memoryHit: false,
+  } : undefined;
+
   const startTime = performance.now();
 
   let response;
@@ -760,6 +779,7 @@ async function handleDebateTurn(
         request: { promptSummary: prompt.slice(0, 100), fileCount: 0 },
         response: { success: false, charLength: 0, error: message },
         latencyMs,
+        reasoning,
       });
     }
     return {
@@ -779,6 +799,7 @@ async function handleDebateTurn(
       request: { promptSummary: prompt.slice(0, 100), fileCount: 0 },
       response: { success: true, charLength: response.text.length },
       latencyMs,
+      reasoning,
     });
   }
 
