@@ -11,12 +11,11 @@ Agestra connects Ollama (local), Gemini CLI, and Codex CLI to Claude Code as plu
 
 ## Quick Start
 
-```bash
-# Install as Claude Code plugin
-claude plugin add agestra
+In Claude Code, run:
 
-# Or install via npm
-npm install -g agestra
+```
+/plugin marketplace add mua-vtuber/Agestra
+/plugin install agestra@agestra
 ```
 
 That's it. Agestra auto-detects available providers (Ollama, Gemini CLI, Codex CLI) on first use.
@@ -235,12 +234,10 @@ agestra/
 
 ## Uninstall
 
-```bash
-# If installed as plugin
-claude plugin remove agestra
+In Claude Code:
 
-# If installed via npm
-npm uninstall -g agestra
+```
+/plugin uninstall agestra@agestra
 ```
 
 No residual files in your project. Clean removal.
