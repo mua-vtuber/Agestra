@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, unlinkSync, statSync } from "fs";
+import { mkdirSync, readdirSync, readFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { durableAppendSync } from "./atomic-write.js";
 
