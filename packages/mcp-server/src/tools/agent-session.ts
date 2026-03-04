@@ -726,7 +726,30 @@ async function handleDebateTurn(
   // Build prompt with full conversation history and call provider
   const prompt = debateEngine.buildPromptForProvider(parsed.debate_id, parsed.provider);
   const startTime = performance.now();
-  const response = await provider.chat({ prompt });
+
+  let response;
+  try {
+    response = await provider.chat({ prompt });
+  } catch (err) {
+    const latencyMs = Math.round(performance.now() - startTime);
+    const message = err instanceof Error ? err.message : String(err);
+    if (deps.traceWriter) {
+      deps.traceWriter.write({
+        traceId: state.id,
+        action: "debate_turn",
+        providerId: parsed.provider,
+        task: state.topic,
+        request: { promptSummary: prompt.slice(0, 100), fileCount: 0 },
+        response: { success: false, charLength: 0, error: message },
+        latencyMs,
+      });
+    }
+    return {
+      content: [{ type: "text", text: `**Debate turn failed (${parsed.provider}):** ${message}` }],
+      isError: true,
+    };
+  }
+
   const latencyMs = Math.round(performance.now() - startTime);
 
   if (deps.traceWriter) {
