@@ -23,3 +23,4 @@ export {
 export { extractJSON, extractJsonFromText } from "./json-parser.js";
 export { AgentLoop, type AgentLoopConfig, type AgentLoopResult, type AgentLoopFactory, type ToolCallRecord } from "./agent-loop.js";
 export { createDefaultTools, createReadOnlyTools, toOllamaToolDefs, type AgentTool, type OllamaToolDefinition } from "./agent-tools.js";
+export { AgentLoopChatAdapter, type ChatAdapter, type AgentLoopChatAdapterConfig } from "./chat-adapter.js";
