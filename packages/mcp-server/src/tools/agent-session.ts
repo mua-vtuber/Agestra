@@ -4,8 +4,8 @@ import type { TraceWriter } from "@agestra/core";
 import type { SessionManager } from "@agestra/agents";
 import type { DocumentManager } from "@agestra/workspace";
 import type { MemoryFacade } from "@agestra/memory";
-import { DebateEngine, TaskDispatcher, CrossValidator, AgentLoop } from "@agestra/agents";
-import type { DebateConfig, EnhancedDebateConfig, AgentLoopFactory } from "@agestra/agents";
+import { DebateEngine, TaskDispatcher, CrossValidator, AgentLoop, AgentLoopChatAdapter, createDefaultTools, createReadOnlyTools } from "@agestra/agents";
+import type { DebateConfig, EnhancedDebateConfig, AgentLoopFactory, ChatAdapter } from "@agestra/agents";
 import { buildCapabilityProfile } from "@agestra/core";
 
 // ── Zod schemas ──────────────────────────────────────────────
@@ -89,8 +89,19 @@ export interface AgentToolDeps {
   traceWriter?: TraceWriter;
 }
 
+// Shared adapter instances for tier-aware chat routing
+const readOnlyAdapter = new AgentLoopChatAdapter({
+  tools: createReadOnlyTools(),
+  baseDir: process.cwd(),
+});
+
+const fullAdapter = new AgentLoopChatAdapter({
+  tools: createDefaultTools(),
+  baseDir: process.cwd(),
+});
+
 // Shared debate engine instance for turn-based debates
-const debateEngine = new DebateEngine();
+const debateEngine = new DebateEngine(readOnlyAdapter);
 
 /**
  * Extract Ollama connection info from a provider if it's an OllamaProvider.
@@ -384,7 +395,7 @@ async function handleDebateStart(
     .catch(() => { /* non-critical */ });
 
   // Run debate (non-blocking)
-  const engine = new DebateEngine();
+  const engine = new DebateEngine(readOnlyAdapter);
   engine.run(debateConfig).then((result) => {
     deps.sessionManager.completeSession(session.id, result.transcript);
     deps.memoryFacade.store({
@@ -485,90 +496,8 @@ async function handleAssignTask(
 
   const startTime = performance.now();
 
-  // Check if this is a tool-tier provider — route through AgentLoop
-  const profile = buildCapabilityProfile(parsed.provider, provider.getCapabilities());
-  const connInfo = getOllamaConnectionInfo(provider as any);
-
-  if (profile.tier === "tool" && connInfo) {
-    try {
-      const loop = new AgentLoop({
-        providerHost: connInfo.host,
-        model: connInfo.model,
-        baseDir: process.cwd(),
-      });
-      const loopResult = await loop.run(prompt);
-      const latencyMs = Math.round(performance.now() - startTime);
-
-      if (deps.traceWriter) {
-        deps.traceWriter.write({
-          traceId: session.id,
-          action: "agent_loop",
-          providerId: parsed.provider,
-          task: parsed.task,
-          request: { promptSummary: prompt.slice(0, 100), fileCount: parsed.files?.length ?? 0 },
-          response: {
-            success: loopResult.success,
-            charLength: loopResult.output.length,
-            error: loopResult.error,
-          },
-          latencyMs,
-          reasoning,
-        });
-      }
-
-      if (loopResult.success) {
-        deps.sessionManager.completeSession(session.id, loopResult.output);
-      } else {
-        deps.sessionManager.updateSessionStatus(session.id, "failed");
-      }
-
-      const statusLabel = loopResult.success ? "completed" : "completed with errors";
-      const toolCallSummary = loopResult.toolCalls.length > 0
-        ? `\n**Tool calls:** ${loopResult.toolCalls.length} (${loopResult.iterations} iterations)`
-        : "";
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `**Task ${statusLabel} (agent-loop)**\n**Task ID:** ${session.id}\n**Provider:** ${parsed.provider}${toolCallSummary}\n\n${loopResult.output}`,
-          },
-        ],
-        isError: !loopResult.success,
-      };
-    } catch (err) {
-      const latencyMs = Math.round(performance.now() - startTime);
-      deps.sessionManager.updateSessionStatus(session.id, "failed");
-      const message = err instanceof Error ? err.message : String(err);
-
-      if (deps.traceWriter) {
-        deps.traceWriter.write({
-          traceId: session.id,
-          action: "agent_loop",
-          providerId: parsed.provider,
-          task: parsed.task,
-          request: { promptSummary: prompt.slice(0, 100), fileCount: parsed.files?.length ?? 0 },
-          response: { success: false, charLength: 0, error: message },
-          latencyMs,
-          reasoning,
-        });
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `**Task failed (agent-loop)**\n**Task ID:** ${session.id}\n**Error:** ${message}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  // Default path: agent-tier providers use direct chat
   try {
-    const response = await provider.chat({ prompt });
+    const response = await fullAdapter.chat(provider, { prompt });
     const latencyMs = Math.round(performance.now() - startTime);
 
     if (deps.traceWriter) {
@@ -714,7 +643,7 @@ async function handleCrossValidate(
 ): Promise<McpToolResult> {
   const parsed = AgentCrossValidateSchema.parse(args);
 
-  const validator = new CrossValidator(deps.registry);
+  const validator = new CrossValidator(deps.registry, readOnlyAdapter);
 
   try {
     const result = await validator.validate({
@@ -884,7 +813,7 @@ async function handleDebateTurn(
 
   let response;
   try {
-    response = await provider.chat({ prompt });
+    response = await readOnlyAdapter.chat(provider, { prompt });
   } catch (err) {
     const latencyMs = Math.round(performance.now() - startTime);
     const message = err instanceof Error ? err.message : String(err);
