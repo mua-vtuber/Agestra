@@ -1,4 +1,5 @@
-import type { AIProvider, ProviderRegistry } from "@agestra/core";
+import type { AIProvider, ProviderRegistry, ChatRequest, ChatResponse } from "@agestra/core";
+import type { ChatAdapter } from "./chat-adapter.js";
 import { extractJsonFromText } from "./json-parser.js";
 
 export interface CrossValidationItem {
@@ -29,7 +30,20 @@ export interface CrossValidationResult {
 }
 
 export class CrossValidator {
-  constructor(private registry: ProviderRegistry) {}
+  constructor(
+    private registry: ProviderRegistry,
+    private chatAdapter?: ChatAdapter,
+  ) {}
+
+  private async chatWith(provider: AIProvider, request: ChatRequest): Promise<ChatResponse> {
+    if (this.chatAdapter) return this.chatAdapter.chat(provider, request);
+    return provider.chat(request);
+  }
+
+  private canValidate(providerId: string): boolean {
+    if (this.chatAdapter) return true;
+    return this.isAgentTier(providerId);
+  }
 
   async validate(
     config: CrossValidationConfig,
@@ -53,14 +67,16 @@ export class CrossValidator {
       reviews.length > 0 && reviews.every((r) => r.passed);
 
     const message = reviews.length === 0
-      ? "No agent-tier validators available for cross-validation."
+      ? (this.chatAdapter
+        ? "No validators available for cross-validation."
+        : "No agent-tier validators available for cross-validation.")
       : undefined;
     return { reviews, overallPass, conflicts, message };
   }
 
   private resolveValidators(config: CrossValidationConfig): AIProvider[] {
     if (config.validators) {
-      return config.validators.filter((v) => this.isAgentTier(v.id));
+      return config.validators.filter((v) => this.canValidate(v.id));
     }
 
     // Use other item providers as cross-validators
@@ -69,7 +85,7 @@ export class CrossValidator {
     for (const item of config.items) {
       if (seen.has(item.providerId)) continue;
       seen.add(item.providerId);
-      if (this.isAgentTier(item.providerId)) {
+      if (this.canValidate(item.providerId)) {
         validators.push(this.registry.get(item.providerId));
       }
     }
@@ -99,7 +115,7 @@ export class CrossValidator {
       "Respond with JSON only: { \"passed\": boolean, \"feedback\": \"string\", \"suggestedFixes\": \"string or omit\" }",
     ].join("\n");
 
-    const response = await validator.chat({ prompt });
+    const response = await this.chatWith(validator, { prompt });
 
     return this.parseReview(item.providerId, validator.id, response.text);
   }

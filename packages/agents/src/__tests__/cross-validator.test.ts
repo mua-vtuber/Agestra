@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { CrossValidator } from "../cross-validator.js";
+import type { ChatAdapter } from "../chat-adapter.js";
 import type {
   AIProvider,
   ChatResponse,
@@ -305,5 +306,83 @@ describe("CrossValidator", () => {
     });
 
     expect(capturedPrompt).toContain("Must follow SOLID principles");
+  });
+
+  describe("CrossValidator with ChatAdapter", () => {
+    it("should route review calls through adapter", async () => {
+      const chatCalls: string[] = [];
+      const adapter: ChatAdapter = {
+        async chat(provider, request) {
+          chatCalls.push(provider.id);
+          return {
+            text: '{ "passed": true, "feedback": "reviewed via adapter" }',
+            model: "mock",
+            provider: provider.id,
+          };
+        },
+      };
+
+      const providerA = mockProvider("gemini-cli", "unused");
+      const providerB = mockProvider("codex-cli", "unused");
+      const registry = createMockRegistry([providerA, providerB], {
+        "gemini-cli": "agent",
+        "codex-cli": "agent",
+      });
+
+      const validator = new CrossValidator(registry, adapter);
+      const result = await validator.validate({
+        items: [
+          { providerId: "gemini-cli", content: "code", task: "review" },
+          { providerId: "codex-cli", content: "code", task: "review" },
+        ],
+      });
+
+      expect(chatCalls).toContain("gemini-cli");
+      expect(chatCalls).toContain("codex-cli");
+      expect(result.reviews[0].feedback).toBe("reviewed via adapter");
+    });
+
+    it("should allow tool-tier validators when adapter is provided", async () => {
+      const adapter: ChatAdapter = {
+        async chat(provider, request) {
+          return {
+            text: '{ "passed": true, "feedback": "tool-tier reviewed" }',
+            model: "mock",
+            provider: provider.id,
+          };
+        },
+      };
+
+      const toolProvider = mockProvider("ollama", '{ "passed": true, "feedback": "ok" }');
+      const agentProvider = mockProvider("gemini-cli", '{ "passed": true, "feedback": "ok" }');
+      const registry = createMockRegistry([toolProvider, agentProvider], {
+        ollama: "tool",
+        "gemini-cli": "agent",
+      });
+
+      const validator = new CrossValidator(registry, adapter);
+      const result = await validator.validate({
+        items: [
+          { providerId: "gemini-cli", content: "code", task: "review" },
+        ],
+        validators: [toolProvider],
+      });
+
+      const reviewerIds = result.reviews.map((r) => r.reviewerProvider);
+      expect(reviewerIds).toContain("ollama");
+    });
+
+    it("should still exclude tool-tier when no adapter", async () => {
+      const toolProvider = mockProvider("ollama", '{ "passed": true, "feedback": "ok" }');
+      const registry = createMockRegistry([toolProvider], { ollama: "tool" });
+
+      const validator = new CrossValidator(registry);
+      const result = await validator.validate({
+        items: [{ providerId: "ollama", content: "code", task: "review" }],
+      });
+
+      expect(result.reviews).toHaveLength(0);
+      expect(result.message).toBe("No agent-tier validators available for cross-validation.");
+    });
   });
 });
