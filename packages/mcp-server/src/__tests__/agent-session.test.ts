@@ -230,8 +230,9 @@ describe("agent-session tools", () => {
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain("Debate started");
 
-      // With instant mocks, the async .catch() also settles immediately,
-      // so session is already "failed" by the time we check
+      // Flush microtask queue so fire-and-forget .catch() settles
+      await new Promise((r) => setTimeout(r, 0));
+
       const sessions = sessionManager.listSessions();
       expect(sessions[0].status).toBe("failed");
     });
@@ -283,12 +284,15 @@ describe("agent-session tools", () => {
         documentManager,
       };
 
-      // Start a debate (non-blocking, but instant mocks settle immediately)
+      // Start a debate (non-blocking)
       await handleTool(
         "agent_debate_start",
         { topic: "test topic", providers: ["gemini"], max_rounds: 1 },
         deps,
       );
+
+      // Flush microtask queue so fire-and-forget .then() settles
+      await new Promise((r) => setTimeout(r, 0));
 
       const sessionId = sessionManager.listSessions()[0].id;
 
@@ -300,7 +304,6 @@ describe("agent-session tools", () => {
 
       const text = statusResult.content[0].text;
       expect(text).toContain(sessionId);
-      // With instant mocks, debate settles immediately via microtask queue
       expect(text).toContain("completed");
       expect(text).toContain("debate");
       expect(text).toContain("test topic");
