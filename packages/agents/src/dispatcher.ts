@@ -1,5 +1,7 @@
 import { randomUUID } from "crypto";
 import type { ProviderRegistry, JobManager, AIProvider } from "@agestra/core";
+import type { AgentLoopFactory } from "./agent-loop.js";
+import type { AgentLoopResult } from "./agent-loop.js";
 
 export interface TaskAssignment {
   id?: string;
@@ -32,6 +34,7 @@ export class TaskDispatcher {
   constructor(
     private registry: ProviderRegistry,
     private jobManager: JobManager,
+    private agentLoopFactory?: AgentLoopFactory,
   ) {}
 
   async dispatch(config: DispatchConfig): Promise<DispatchResult> {
@@ -99,7 +102,19 @@ export class TaskDispatcher {
 
       // Submit all ready assignments in parallel
       const jobMap = new Map<string, string>(); // assignmentId -> jobId
+      const loopPromises = new Map<string, Promise<AgentLoopResult>>(); // assignmentId -> AgentLoop promise
+
       for (const a of ready) {
+        // Route tool-tier providers through AgentLoop
+        if (this.agentLoopFactory) {
+          const loop = this.agentLoopFactory.create(a.providerId);
+          if (loop) {
+            loopPromises.set(a.id, loop.run(a.task));
+            continue;
+          }
+        }
+
+        // Default: CLI job submission (agent-tier or no factory)
         const jobId = this.jobManager.submit({
           provider: a.providerId,
           prompt: a.task,
@@ -107,7 +122,36 @@ export class TaskDispatcher {
         jobMap.set(a.id, jobId);
       }
 
-      // Poll until all submitted jobs finish
+      // Await AgentLoop results
+      if (loopPromises.size > 0) {
+        const entries = [...loopPromises.entries()];
+        const settled = await Promise.allSettled(entries.map(([, p]) => p));
+
+        for (let i = 0; i < entries.length; i++) {
+          const [assignmentId] = entries[i];
+          const settlement = settled[i];
+
+          if (settlement.status === "fulfilled") {
+            const loopResult = settlement.value;
+            results.push({
+              assignmentId,
+              providerId: assignmentById.get(assignmentId)!.providerId,
+              output: loopResult.output,
+              status: loopResult.success ? "completed" : "error",
+            });
+          } else {
+            results.push({
+              assignmentId,
+              providerId: assignmentById.get(assignmentId)!.providerId,
+              output: settlement.reason?.message ?? "AgentLoop failed",
+              status: "error",
+            });
+          }
+          completed.add(assignmentId);
+        }
+      }
+
+      // Poll until all submitted CLI jobs finish
       await this.pollJobs(jobMap, results, assignmentById, completed, startTime, timeoutMs);
     }
 

@@ -154,4 +154,15 @@ export class OllamaProvider implements AIProvider {
   getModels(): DetectedModel[] {
     return [...this.models];
   }
+
+  /**
+   * Returns connection info needed by the AgentLoop to call
+   * Ollama's /api/chat endpoint directly for tool-calling.
+   */
+  getConnectionInfo(): { host: string; model: string } {
+    return {
+      host: this.host,
+      model: this.selectModel(),
+    };
+  }
 }
