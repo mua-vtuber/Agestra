@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
-import type { AIProvider } from "@agestra/core";
+import type { AIProvider, ChatRequest, ChatResponse } from "@agestra/core";
+import type { ChatAdapter } from "./chat-adapter.js";
 import { extractJsonFromText } from "./json-parser.js";
 
 export interface DebateConfig {
@@ -70,6 +71,13 @@ export interface DebateCreateConfig {
 
 export class DebateEngine {
   private debates = new Map<string, DebateState>();
+
+  constructor(private chatAdapter?: ChatAdapter) {}
+
+  private async chatWith(provider: AIProvider, request: ChatRequest): Promise<ChatResponse> {
+    if (this.chatAdapter) return this.chatAdapter.chat(provider, request);
+    return provider.chat(request);
+  }
 
   // ── Turn-based stateful methods ──────────────────────────────
 
@@ -185,7 +193,7 @@ export class DebateEngine {
           prompt += `\n\nValidator feedback from previous round:\n${validationFeedback}`;
         }
 
-        const response = await provider.chat({ prompt });
+        const response = await this.chatWith(provider, { prompt });
         roundResponses.push({ provider: provider.id, text: response.text });
       }
 
@@ -231,7 +239,7 @@ Respond in JSON:
   "feedback": "..."
 }`;
 
-    const response = await config.validator!.chat({ prompt });
+    const response = await this.chatWith(config.validator!, { prompt });
     return this.parseValidation(response.text);
   }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { DebateEngine } from "../debate.js";
 import type { AIProvider, ChatResponse, ProviderCapability, HealthStatus, ChatRequest } from "@agestra/core";
+import type { ChatAdapter } from "../chat-adapter.js";
 
 function mockProvider(id: string, responses: string[]): AIProvider {
   let callIndex = 0;
@@ -243,6 +244,77 @@ describe("DebateEngine", () => {
       expect(transcript).toContain("REST is proven");
       expect(transcript).toContain("[Turn 2] claude");
       expect(transcript).toContain("[Turn 3] codex");
+    });
+  });
+
+  describe("DebateEngine with ChatAdapter", () => {
+    it("should route provider calls through adapter in run()", async () => {
+      const chatCalls: string[] = [];
+      const adapter: ChatAdapter = {
+        async chat(provider, request) {
+          chatCalls.push(provider.id);
+          return { text: `adapted response from ${provider.id}`, model: "mock", provider: provider.id };
+        },
+      };
+
+      const gemini = mockProvider("gemini", ["unused"]);
+      const codex = mockProvider("codex", ["unused"]);
+
+      const engine = new DebateEngine(adapter);
+      const result = await engine.run({
+        topic: "test",
+        providers: [gemini, codex],
+        maxRounds: 1,
+      });
+
+      expect(chatCalls).toEqual(["gemini", "codex"]);
+      expect(result.transcript).toContain("adapted response from gemini");
+      expect(result.transcript).toContain("adapted response from codex");
+    });
+
+    it("should route validator calls through adapter in enhanced mode", async () => {
+      const chatCalls: string[] = [];
+      const adapter: ChatAdapter = {
+        async chat(provider, request) {
+          chatCalls.push(provider.id);
+          if (provider.id === "validator") {
+            return {
+              text: '{ "goalAchievement": true, "completeness": true, "accuracy": true, "consistency": true, "feedback": "good" }',
+              model: "mock",
+              provider: "validator",
+            };
+          }
+          return { text: `response from ${provider.id}`, model: "mock", provider: provider.id };
+        },
+      };
+
+      const gemini = mockProvider("gemini", ["unused"]);
+      const validator = mockProvider("validator", ["unused"]);
+
+      const engine = new DebateEngine(adapter);
+      await engine.run({
+        topic: "test",
+        providers: [gemini],
+        maxRounds: 3,
+        goal: "reach consensus",
+        validator,
+        minRounds: 1,
+      } as any);
+
+      expect(chatCalls).toContain("validator");
+    });
+
+    it("should fall back to direct chat when no adapter provided", async () => {
+      const gemini = mockProvider("gemini", ["direct response"]);
+
+      const engine = new DebateEngine();
+      const result = await engine.run({
+        topic: "test",
+        providers: [gemini],
+        maxRounds: 1,
+      });
+
+      expect(result.transcript).toContain("direct response");
     });
   });
 });
