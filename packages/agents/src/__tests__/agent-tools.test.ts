@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
-import { createDefaultTools, toOllamaToolDefs } from "../agent-tools.js";
+import { createDefaultTools, createReadOnlyTools, toOllamaToolDefs } from "../agent-tools.js";
 import type { AgentTool } from "../agent-tools.js";
 
 describe("AgentTools", () => {
@@ -34,6 +34,28 @@ describe("AgentTools", () => {
       expect(names).toContain("file_list");
       expect(names).toContain("grep_search");
       expect(names).toContain("shell_exec");
+    });
+  });
+
+  describe("createReadOnlyTools", () => {
+    it("returns exactly 3 tools", () => {
+      const roTools = createReadOnlyTools();
+      expect(roTools).toHaveLength(3);
+    });
+
+    it("includes only read-oriented tools", () => {
+      const roTools = createReadOnlyTools();
+      const names = roTools.map((t) => t.name);
+      expect(names).toContain("file_read");
+      expect(names).toContain("file_list");
+      expect(names).toContain("grep_search");
+    });
+
+    it("excludes write and shell tools", () => {
+      const roTools = createReadOnlyTools();
+      const names = roTools.map((t) => t.name);
+      expect(names).not.toContain("file_write");
+      expect(names).not.toContain("shell_exec");
     });
   });
 

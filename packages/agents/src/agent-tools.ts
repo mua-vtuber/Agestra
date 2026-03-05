@@ -231,6 +231,10 @@ export function createDefaultTools(): AgentTool[] {
   return [fileReadTool, fileWriteTool, fileListTool, grepSearchTool, shellExecTool];
 }
 
+export function createReadOnlyTools(): AgentTool[] {
+  return [fileReadTool, fileListTool, grepSearchTool];
+}
+
 export function toOllamaToolDefs(tools: AgentTool[]): OllamaToolDefinition[] {
   return tools.map((t) => ({
     type: "function" as const,

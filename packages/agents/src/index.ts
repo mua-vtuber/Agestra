@@ -22,4 +22,4 @@ export {
 } from "./cross-validator.js";
 export { extractJSON, extractJsonFromText } from "./json-parser.js";
 export { AgentLoop, type AgentLoopConfig, type AgentLoopResult, type AgentLoopFactory, type ToolCallRecord } from "./agent-loop.js";
-export { createDefaultTools, toOllamaToolDefs, type AgentTool, type OllamaToolDefinition } from "./agent-tools.js";
+export { createDefaultTools, createReadOnlyTools, toOllamaToolDefs, type AgentTool, type OllamaToolDefinition } from "./agent-tools.js";
