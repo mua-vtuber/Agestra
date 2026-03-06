@@ -486,6 +486,7 @@ describe('HybridSearch graph BFS', () => {
       ftsEnabled: true,
       graphEnabled: true,
       graphMaxHops: 2,
+      graphSkipThreshold: 1.0,
     });
 
     const output = await stage.execute({
@@ -516,7 +517,8 @@ describe('HybridSearch graph BFS', () => {
     const stage = new HybridSearch(db, {
       ftsEnabled: true,
       graphEnabled: true,
-      graphMaxHops: 1, // Only 1 hop
+      graphMaxHops: 1,
+      graphSkipThreshold: 1.0, // Only 1 hop
     });
 
     const output = await stage.execute({
@@ -546,6 +548,7 @@ describe('HybridSearch graph BFS', () => {
       ftsEnabled: true,
       graphEnabled: true,
       graphMaxHops: 1,
+      graphSkipThreshold: 1.0,
     });
 
     const output = await stage.execute({
@@ -573,6 +576,7 @@ describe('HybridSearch graph BFS', () => {
       ftsEnabled: true,
       graphEnabled: true,
       graphMaxHops: 1,
+      graphSkipThreshold: 1.0,
     });
 
     const output = await stage.execute({
@@ -596,6 +600,7 @@ describe('HybridSearch graph BFS', () => {
       ftsEnabled: true,
       graphEnabled: true,
       graphMaxHops: 1,
+      graphSkipThreshold: 1.0,
     });
 
     const output = await stage.execute({
@@ -634,6 +639,7 @@ describe('HybridSearch result fusion', () => {
       ftsEnabled: true,
       graphEnabled: true,
       graphMaxHops: 1,
+      graphSkipThreshold: 1.0,
     });
 
     const output = await stage.execute({
@@ -659,6 +665,7 @@ describe('HybridSearch result fusion', () => {
     const stage = new HybridSearch(db, {
       ftsEnabled: true,
       graphEnabled: true,
+      graphSkipThreshold: 1.0,
     });
 
     const output = await stage.execute({

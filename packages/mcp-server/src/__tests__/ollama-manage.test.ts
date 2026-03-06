@@ -21,11 +21,10 @@ function mockOllamaProvider(
   id: string,
   models: MockOllamaModel[] = [],
   host = "http://localhost:11434",
-): AIProvider & { getModels: () => MockOllamaModel[]; host: string } {
+): AIProvider & { getModels: () => MockOllamaModel[]; getConnectionInfo: () => { host: string; model: string } } {
   return {
     id,
     type: "ollama",
-    host,
     initialize: async () => {},
     healthCheck: async (): Promise<HealthStatus> => ({ status: "ok" }),
     getCapabilities: (): ProviderCapability => ({
@@ -45,6 +44,7 @@ function mockOllamaProvider(
       provider: id,
     }),
     getModels: () => [...models],
+    getConnectionInfo: () => ({ host, model: "llama3" }),
   };
 }
 

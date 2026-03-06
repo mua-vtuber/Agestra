@@ -69,6 +69,8 @@ export interface DebateCreateConfig {
   documentId?: string;
 }
 
+const DEBATE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
 export class DebateEngine {
   private debates = new Map<string, DebateState>();
 
@@ -82,6 +84,7 @@ export class DebateEngine {
   // ── Turn-based stateful methods ──────────────────────────────
 
   create(config: DebateCreateConfig): DebateState {
+    this.purgeStaleDebates();
     const id = randomUUID();
     const now = new Date().toISOString();
     const state: DebateState = {
@@ -145,6 +148,10 @@ export class DebateEngine {
     return this.debates.get(debateId);
   }
 
+  delete(debateId: string): boolean {
+    return this.debates.delete(debateId);
+  }
+
   buildTurnTranscript(debateId: string): string {
     const state = this.getState(debateId);
     if (!state) throw new Error(`Debate not found: ${debateId}`);
@@ -159,6 +166,17 @@ export class DebateEngine {
       doc += `### [Turn ${turn.turnNumber}] ${turn.speaker}\n\n${turn.content}\n\n`;
     }
     return doc;
+  }
+
+  private purgeStaleDebates(): void {
+    const now = Date.now();
+    for (const [id, state] of this.debates) {
+      if (state.status !== "active") continue;
+      const createdMs = new Date(state.createdAt).getTime();
+      if (now - createdMs > DEBATE_TTL_MS) {
+        this.debates.delete(id);
+      }
+    }
   }
 
   // ── Legacy round-based method (backward compat) ──────────────

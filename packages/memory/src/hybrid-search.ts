@@ -298,11 +298,14 @@ export class HybridSearch implements PipelineStage<RetrievalPipelineData, Retrie
       vectorScores = await this.vectorSearch(query, topic, limit * 3, nodeType);
     }
 
-    // Graph expansion from top seeds
+    // Graph expansion from top seeds (skip if L2 results are sufficient)
     let graphScores = new Map<string, ScoredEntry>();
     if (useGraph && (ftsScores.size > 0 || vectorScores.size > 0)) {
-      const seedIds = this.getSeedIds(ftsScores, vectorScores, 5);
-      graphScores = this.graphExpand(seedIds);
+      const topL2Score = this.getTopScore(ftsScores, vectorScores);
+      if (topL2Score < this.config.graphSkipThreshold) {
+        const seedIds = this.getSeedIds(ftsScores, vectorScores, 5);
+        graphScores = this.graphExpand(seedIds);
+      }
     }
 
     // Fuse or use single source
@@ -690,6 +693,23 @@ export class HybridSearch implements PipelineStage<RetrievalPipelineData, Retrie
   }
 
   // ── Fusion ─────────────────────────────────────────────────────────
+
+  /**
+   * Return the highest score among L2 (FTS + vector) results.
+   */
+  private getTopScore(
+    ftsScores: Map<string, ScoredEntry>,
+    vectorScores: Map<string, ScoredEntry>,
+  ): number {
+    let top = 0;
+    for (const entry of ftsScores.values()) {
+      if (entry.score > top) top = entry.score;
+    }
+    for (const entry of vectorScores.values()) {
+      if (entry.score > top) top = entry.score;
+    }
+    return top;
+  }
 
   /**
    * Pick top node IDs from FTS + vector results as graph seeds.

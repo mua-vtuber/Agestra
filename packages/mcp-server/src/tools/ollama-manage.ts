@@ -118,7 +118,7 @@ async function handleOllamaPull(
     // Try to pull using Ollama's API - the provider exposes host indirectly
     // through health check, but we'll do a direct approach:
     // Cast to access internal host (or use a wrapper)
-    const host = (ollama as any).host || "http://localhost:11434";
+    const host = ollama.getConnectionInfo().host;
     const res = await fetch(`${host}/api/pull`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

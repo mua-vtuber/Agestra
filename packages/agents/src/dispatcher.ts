@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import type { ProviderRegistry, JobManager, AIProvider } from "@agestra/core";
-import type { AgentLoopFactory } from "./agent-loop.js";
-import type { AgentLoopResult } from "./agent-loop.js";
+import type { AgentLoopFactory, AgentLoopResult } from "./agent-loop.js";
 
 export interface TaskAssignment {
   id?: string;
@@ -244,8 +243,9 @@ export class TaskDispatcher {
               prompt: `Please synthesize and summarize the following results into a unified summary:\n\n${concatenated}`,
             });
             return response.text;
-          } catch {
-            return concatenated;
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return `[Summarization failed: ${message}]\n\n${concatenated}`;
           }
         }
         return concatenated;
@@ -257,8 +257,9 @@ export class TaskDispatcher {
               prompt: `Compare the following approaches and determine the best one, explaining your reasoning:\n\n${concatenated}`,
             });
             return response.text;
-          } catch {
-            return concatenated;
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return `[Debate merge failed: ${message}]\n\n${concatenated}`;
           }
         }
         return concatenated;

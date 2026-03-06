@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { readFileSync } from "fs";
 import { resolve, relative } from "path";
-import type { ProviderRegistry, AIProvider } from "@agestra/core";
+import type { ProviderRegistry, AIProvider, TraceWriter } from "@agestra/core";
 import { atomicWriteSync } from "@agestra/core";
 
 // ── Zod schemas ──────────────────────────────────────────────
@@ -24,12 +24,15 @@ const AiAnalyzeFilesSchema = z.object({
 const AiCompareSchema = z.object({
   providers: z.array(z.string()).min(1).describe("List of provider IDs to compare"),
   prompt: z.string().describe("Prompt to send to all providers"),
+  aggregate_provider: z.string().optional().describe("Provider ID to synthesize all responses into a unified document. If omitted, returns raw comparisons only."),
+  aggregate_prompt: z.string().optional().describe("Custom synthesis prompt. Default: synthesize and identify agreements/disagreements."),
 });
 
 // ── Types ────────────────────────────────────────────────────
 
 export interface ToolDeps {
   registry: ProviderRegistry;
+  traceWriter?: TraceWriter;
 }
 
 interface McpToolResult {
@@ -98,7 +101,7 @@ export function getTools() {
     {
       name: "ai_compare",
       description:
-        "Send the same prompt to multiple providers and return a comparison of their responses.",
+        "Send the same prompt to multiple providers and return a comparison. Optionally aggregate results into a unified synthesis using a designated provider.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -108,6 +111,14 @@ export function getTools() {
             description: "List of provider IDs to compare",
           },
           prompt: { type: "string", description: "Prompt to send to all providers" },
+          aggregate_provider: {
+            type: "string",
+            description: "Provider ID to synthesize all responses into a unified document",
+          },
+          aggregate_prompt: {
+            type: "string",
+            description: "Custom synthesis prompt (default: synthesize agreements/disagreements)",
+          },
         },
         required: ["providers", "prompt"],
       },
@@ -122,7 +133,10 @@ async function handleAiChat(
   deps: ToolDeps,
 ): Promise<McpToolResult> {
   const parsed = AiChatSchema.parse(args);
-  const provider = deps.registry.get(parsed.provider);
+  const provider = parsed.provider === "auto"
+    ? deps.registry.getBestForTask("chat", deps.traceWriter) ?? deps.registry.getAvailable()[0]
+    : deps.registry.get(parsed.provider);
+  if (!provider) throw new Error("No providers available for auto-routing");
 
   const response = await provider.chat({
     prompt: parsed.prompt,
@@ -146,7 +160,10 @@ async function handleAiAnalyzeFiles(
   deps: ToolDeps,
 ): Promise<McpToolResult> {
   const parsed = AiAnalyzeFilesSchema.parse(args);
-  const provider = deps.registry.get(parsed.provider);
+  const provider = parsed.provider === "auto"
+    ? deps.registry.getBestForTask("analysis", deps.traceWriter) ?? deps.registry.getAvailable()[0]
+    : deps.registry.get(parsed.provider);
+  if (!provider) throw new Error("No providers available for auto-routing");
 
   // Read file contents (with path validation)
   const fileContents = parsed.file_paths.map((filePath) => {
@@ -217,8 +234,43 @@ async function handleAiCompare(
     }
   }
 
+  // Aggregate results if requested
+  let synthesis: string | undefined;
+  if (parsed.aggregate_provider) {
+    const aggregator = deps.registry.get(parsed.aggregate_provider);
+    const successfulResults = results.filter((r) => r.text !== null);
+
+    if (successfulResults.length > 0) {
+      const defaultPrompt = [
+        "You are synthesizing multiple AI responses into a unified analysis.",
+        "For each topic covered, identify:",
+        "1. **Agreements** — points where all providers align",
+        "2. **Disagreements** — conflicting opinions with each side's reasoning",
+        "3. **Unique insights** — valuable points raised by only one provider",
+        "4. **Recommended conclusion** — your synthesis of the best answer",
+        "",
+        "Produce a structured document, not a simple concatenation.",
+      ].join("\n");
+
+      const aggregatePrompt = `${parsed.aggregate_prompt ?? defaultPrompt}\n\n---\n\n${comparison}`;
+
+      try {
+        const response = await aggregator.chat({ prompt: aggregatePrompt });
+        synthesis = response.text;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        synthesis = `[Aggregation failed: ${message}]`;
+      }
+    }
+  }
+
+  let output = comparison;
+  if (synthesis) {
+    output += `---\n\n# Synthesis\n\n${synthesis}`;
+  }
+
   return {
-    content: [{ type: "text", text: comparison }],
+    content: [{ type: "text", text: output }],
   };
 }
 

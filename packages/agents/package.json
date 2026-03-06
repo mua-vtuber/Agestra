@@ -10,8 +10,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agestra/core": "*",
-    "@agestra/workspace": "*"
+    "@agestra/core": "*"
   },
   "devDependencies": {
     "typescript": "^5.0.0",

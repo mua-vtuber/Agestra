@@ -234,6 +234,8 @@ export interface MemoryConfig {
   ftsRelevanceFloor: number;
   /** Graph hop decay factor per hop. */
   graphHopDecay: number;
+  /** Minimum top L2 score to skip L3 graph expansion (0-1). */
+  graphSkipThreshold: number;
 
   // ── Importance thresholds ──────────────────────────────────────
   /** Nodes with importance >= this get a [important] marker in context. */
@@ -288,6 +290,7 @@ export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
   pinSearchBoost: 1.2,
   ftsRelevanceFloor: 0.3,
   graphHopDecay: 0.7,
+  graphSkipThreshold: 0.7,
   importanceHighThreshold: 0.8,
   reflectionMinGroupSize: 3,
   tokenSafetyMargin: 0.9,

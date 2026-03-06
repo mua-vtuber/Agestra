@@ -7,7 +7,7 @@
 
 [English](README.md) | [한국어](README.ko.md)
 
-Agestra connects Ollama (local), Gemini CLI, and Codex CLI to Claude Code as pluggable providers, enabling multi-agent debates, parallel task dispatch, cross-validation, and a persistent GraphRAG memory system — all through 28 MCP tools.
+Agestra connects Ollama (local), Gemini CLI, and Codex CLI to Claude Code as pluggable providers, enabling multi-agent debates, parallel task dispatch, cross-validation, and a persistent GraphRAG memory system — all through 39 MCP tools.
 
 ## Quick Start
 
@@ -70,7 +70,7 @@ Turborepo monorepo with 8 packages:
 | `@agestra/agents` | Debate engine, task dispatcher, cross-validator, session manager |
 | `@agestra/workspace` | Document manager for code review workflows |
 | `@agestra/memory` | GraphRAG — FTS5 + vector + knowledge graph hybrid search, dead-end tracking |
-| `@agestra/mcp-server` | MCP protocol layer, 28 tools, dispatch |
+| `@agestra/mcp-server` | MCP protocol layer, 39 tools, dispatch |
 
 ### Design Principles
 
@@ -83,17 +83,17 @@ Turborepo monorepo with 8 packages:
 
 ---
 
-## Tools (28)
+## Tools (39)
 
 ### AI Chat (3)
 
 | Tool | Description |
 |------|-------------|
-| `ai_chat` | Chat with a specific provider |
+| `ai_chat` | Chat with a specific provider (use `"auto"` for quality-based routing) |
 | `ai_analyze_files` | Read files from disk and send contents with a question to a provider |
 | `ai_compare` | Send the same prompt to multiple providers, compare responses |
 
-### Agent Orchestration (9)
+### Agent Orchestration (16)
 
 | Tool | Description |
 |------|-------------|
@@ -102,17 +102,25 @@ Turborepo monorepo with 8 packages:
 | `agent_debate_create` | Create a turn-based debate session (returns debate ID) |
 | `agent_debate_turn` | Execute one provider's turn; supports `provider: "claude"` for Claude's independent participation |
 | `agent_debate_conclude` | End a debate and generate final transcript |
+| `agent_debate_review` | Send a document to multiple providers for independent review |
 | `agent_assign_task` | Delegate a task to a specific provider |
 | `agent_task_status` | Check task completion and result |
 | `agent_dispatch` | Distribute tasks across providers in parallel (dependency ordering) |
 | `agent_cross_validate` | Cross-validate outputs (agent-tier validators only) |
+| `agent_task_chain_create` | Create a multi-step task chain with dependencies and checkpoints |
+| `agent_task_chain_step` | Execute the next (or specified) step in a chain |
+| `agent_task_chain_status` | Check chain progress and step results |
+| `agent_changes_review` | Review file changes from an isolated task |
+| `agent_changes_accept` | Accept and merge changes from an isolated task |
+| `agent_changes_reject` | Reject changes and clean up the isolated worktree |
 
-### Workspace (4)
+### Workspace (5)
 
 | Tool | Description |
 |------|-------------|
 | `workspace_create_review` | Create a code review document with files and rules |
 | `workspace_request_review` | Request a provider to review a document |
+| `workspace_review_status` | Check review completion status |
 | `workspace_add_comment` | Add a comment to a review |
 | `workspace_read` | Read review contents |
 
@@ -147,6 +155,14 @@ Turborepo monorepo with 8 packages:
 |------|-------------|
 | `cli_job_submit` | Submit a long-running CLI task to background |
 | `cli_job_status` | Check job status and output |
+
+### Trace / Observability (3)
+
+| Tool | Description |
+|------|-------------|
+| `trace_query` | Query trace records with filtering (provider, task, time range) |
+| `trace_summary` | Get quality and performance stats per provider and task type |
+| `trace_visualize` | Generate a Mermaid diagram of a traced operation's flow |
 
 ---
 
@@ -219,7 +235,7 @@ agestra/
 │   ├── agents/              # Debate engine, dispatcher, cross-validator
 │   ├── workspace/           # Code review document manager
 │   ├── memory/              # GraphRAG: hybrid search, dead-end tracking
-│   └── mcp-server/          # MCP server, 28 tools, dispatch
+│   └── mcp-server/          # MCP server, 39 tools, dispatch
 ├── package.json             # Workspace root
 └── turbo.json               # Turborepo pipeline
 ```
