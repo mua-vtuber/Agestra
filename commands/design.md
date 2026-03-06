@@ -23,9 +23,9 @@ If `$ARGUMENTS` is empty, present a starting-point choice using AskUserQuestion 
 
 If `$ARGUMENTS` is provided, use it directly as the subject.
 
-## Step 2: Check available providers
+## Step 2: Check environment and available providers
 
-Call `provider_list` to check which external AI providers (Ollama, Gemini, Codex) are currently available.
+Call `environment_check` to determine which providers and modes are available.
 
 If no providers are available, skip to running the `agestra-designer` agent directly (Claude only).
 
@@ -33,38 +33,52 @@ If no providers are available, skip to running the `agestra-designer` agent dire
 
 Use AskUserQuestion to present these options (in the user's language):
 
-| Option | Description |
-|--------|-------------|
-| **Claude only** | Claude's agestra-designer agent explores architecture through Socratic questioning |
-| **Compare** | Multiple AIs independently propose architecture approaches |
-| **Debate** | AIs discuss architecture trade-offs until they reach consensus |
+| Option | Condition | Description |
+|--------|-----------|-------------|
+| **Claude only** | Always | 플러그인 전문 에이전트가 소크라테스식 질문으로 아키텍처 탐색 |
+| **각자 독립** | 1+ provider available | 각 AI가 독립적으로 아키텍처 제안 → 진행자가 취합하여 문서 작성 |
+| **끝장토론** | 1+ provider available | 각자 독립 + 문서를 돌아가며 분석/피드백, 모두 동의할 때까지 |
+
+Only show options whose conditions are met. If no providers are available, skip and run Claude only.
 
 ## Step 4: Execute based on selection
 
 ### If "Claude only":
 Spawn the `agestra-designer` agent with the subject as context. The designer will ask questions to understand intent, explore the codebase for existing patterns, propose 2-3 approaches with trade-offs, refine based on feedback, and produce a design document in `docs/plans/`.
 
-### If "Compare":
-1. Call `ai_compare` with all available providers and `aggregate_provider` set to the most capable available provider. Use this prompt template:
+### If "각자 독립":
+1. In parallel:
+   - Spawn the `agestra-designer` agent for Claude's independent architecture exploration.
+   - For each available provider, call `ai_chat` with this prompt:
 
-   > Propose an architecture approach for [subject]. Consider existing patterns in the codebase, trade-offs (complexity, performance, maintainability), and implementation steps. Present 2-3 distinct approaches with pros/cons for each.
-   >
-   > Subject: [the design subject]
+     > Propose an architecture approach for [subject]. Consider existing patterns in the codebase, trade-offs (complexity, performance, maintainability), and implementation steps. Present 2-3 distinct approaches with pros/cons for each.
+     >
+     > Subject: [the design subject]
 
-2. The aggregated synthesis is included in the response. Present the unified architecture analysis to the user, highlighting where providers agree/disagree on approach.
+2. Collect all results (Claude's designer output + each provider's response).
+3. Spawn the `agestra-moderator` agent in **Independent Aggregation** mode:
+   - Pass ALL results as input, tagged by source provider.
+   - Moderator classifies: consensus approaches, unique ideas, disputed trade-offs.
+   - Moderator generates an integrated architecture document.
+4. Present the integrated document to the user.
 
-### If "Debate":
-1. Spawn the `agestra-moderator` agent with this context:
+### If "끝장토론":
+1. Execute "각자 독립" steps 1-3 above (independent work + initial aggregation).
+   - The moderator's integrated document becomes the starting document.
 
-   > Topic: Architecture design for [subject]
-   > Specialist perspective: agestra-designer — pre-implementation architecture explorer using Socratic questioning and trade-off analysis. Focuses on finding the right approach before writing code.
-   > Each participant should propose their preferred architecture approach with rationale, then discuss trade-offs and reach a recommendation.
+2. Document review rounds (max 5):
+   a. Moderator sends the current document to each AI for review:
+      - Claude: spawn `agestra-designer` → analyze document → write section-by-section feedback
+      - Other providers: `agent_debate_turn` with the document as prompt, requesting agree/disagree per section
+   b. Moderator collects all feedback.
+   c. Classify: agree/disagree per section per provider.
+   d. Revise document incorporating disagreement feedback.
+   e. If all providers agree on all sections → consensus reached.
+   f. If not → next round with revised document.
 
-2. After the debate concludes and a document is produced, run a **document review round**:
-   - Call `agent_debate_review` with the debate's conclusion document and all participating providers.
-   - If any provider disagrees, revise the document addressing their feedback and call `agent_debate_review` again.
-   - Repeat until all providers agree or 3 review rounds have been completed.
-   - Present the final reviewed document to the user.
+3. Present the final document:
+   - Consensus sections: marked as agreed
+   - Disputed sections: show split positions with each provider's rationale
 
 ### If "Other":
 Follow the user's specified approach.

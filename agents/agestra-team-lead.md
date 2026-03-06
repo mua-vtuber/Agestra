@@ -39,46 +39,107 @@ If the request is already clear (specific files, functions, concrete criteria):
 
 Before executing, gather context:
 
-1. Call `provider_list` to check which external AI providers are available.
-2. Call `ollama_models` to assess Ollama model sizes and capabilities.
-3. Read the design document from Phase 0 (or existing `docs/plans/` if skipping Phase 0).
-4. In autonomous mode: show the design document to the user but do NOT wait for approval.
+1. Call `environment_check` to get the full capability map:
+   - Which CLI tools are installed (codex, gemini, tmux)
+   - Which Ollama models are available and their tier classifications
+   - Whether autonomous work is possible (CLI workers + git worktree)
+   - Available modes: claude_only, independent, debate, team
+2. Call `provider_list` for provider availability.
+3. Read existing design documents in `docs/plans/`.
+4. Store environment capabilities for later mode selection:
+   - `can_autonomous_work`: CLI workers available?
+   - `available_providers`: which are online?
+   - `ollama_tiers`: model size classifications
+5. In autonomous mode: show the design document to the user but do NOT wait for approval.
 
 ### Phase 2: Task Design
 
 Decompose the work into independent, assignable tasks:
 
-1. Break the requirement into concrete tasks. Each task must specify:
+1. **Work Mode Selection** — If external providers are available from Phase 1:
+
+   Use AskUserQuestion to present (in the user's language):
+
+   | Option | Description |
+   |--------|-------------|
+   | **Claude만으로** | Claude가 직접 작업. 프로젝트/전역 에이전트 활용 |
+   | **다른 AI도 함께** | CLI AI는 자율 작업, Ollama는 단순 작업, Claude가 팀장으로 감독 |
+
+   If no external providers available: skip selection, proceed with Claude only.
+   In autonomous mode: auto-select based on task complexity:
+   - 단순 (1-2 파일, 명확한 변경) → Claude만
+   - 복잡 (3+ 파일, 다중 컴포넌트) → 다른 AI도 함께 (외부 가능 시)
+
+2. **Task Decomposition** — Break the requirement into concrete tasks. Each task must specify:
    - What to do (clear description)
    - Which files to read/modify (paths)
    - Expected outcome (what "done" looks like)
    - Constraints (what NOT to do)
 
-2. Route each task by AI suitability:
-   - **Complex implementation, multi-step reasoning** → Gemini, Codex via `agent_assign_task`
-   - **Simple, clear transformations** → Ollama (match task complexity to model size)
+3. **Task Routing** — Route each task by AI suitability:
+
+   If **"Claude만으로"** selected:
    - **Architecture/design** → `agestra-designer` agent
    - **Code review** → `agestra-reviewer` agent
    - **Quality verification** → `agestra-qa` agent
+   - **Implementation** → Claude directly or project-specific agents
 
-3. Define dependency relationships between tasks.
+   If **"다른 AI도 함께"** selected:
 
-4. Present the distribution plan to the user and wait for approval before executing.
+   | Task Characteristics | Route To |
+   |---------------------|----------|
+   | 복잡 구현, 다단계 추론 | Codex/Gemini CLI worker (`cli_worker_spawn`) |
+   | 단순 변환, 포맷팅, 패턴 적용 | Ollama (`ai_chat`, tier-matched model) |
+   | 핵심 설계 판단 | Claude 직접 |
+   | 테스트 작성 | Claude 에이전트 (tester) |
+   | 코드 리뷰 | Claude 에이전트 (reviewer) |
+
+4. Define dependency relationships between tasks.
+
+5. Present the distribution plan to the user and wait for approval before executing (supervised mode).
 
 ### Phase 3: Parallel Execution
 
 Execute approved tasks:
 
-1. Spawn Agent subagents in parallel — one per task or per provider.
-   Each subagent calls the appropriate MCP tool:
-   - `agent_assign_task` for single-provider work (use `isolate: true` for worktree isolation)
-   - `agent_dispatch` for multiple parallel assignments (use `auto_qa: true` for auto build/test)
-   - `ai_compare` when you need multiple perspectives on the same question
-   - `agent_task_chain_create` for complex multi-step work requiring intermediate review
+**Claude tasks:**
+- Direct implementation or agent spawn (existing behavior).
+
+**CLI Worker tasks** (when "다른 AI도 함께"):
+1. For each CLI worker task, call `cli_worker_spawn` with:
+   - `provider`: codex or gemini
+   - `task_description`: detailed task prompt (see Prompt Crafting)
+   - `working_dir`: project root
+   - `files_to_read`: reference files (readonly)
+   - `files_to_modify`: target files (readwrite)
+   - `constraints`: what NOT to do
+   - `success_criteria`: verification commands
+   - `use_worktree`: true (git isolation)
+   - `timeout_minutes`: based on task complexity
 
 2. Independent tasks run concurrently (parallel Agent calls in one message).
 3. Dependent tasks run sequentially — wait for blockers to complete.
-4. For complex tasks, use task chains: create a chain with `agent_task_chain_create`, then execute steps one by one with `agent_task_chain_step`. Checkpoint steps pause for your review before continuing.
+
+**Ollama tasks** (when "다른 AI도 함께"):
+- Call `ai_chat` with tier-matched model for simple tasks.
+- Claude applies the Ollama-generated changes.
+
+**Monitor Loop** (active while CLI workers are running):
+- Every 30 seconds: call `cli_worker_status` for each active worker.
+- On worker COMPLETED: call `cli_worker_collect`, review the diff.
+- On worker FAILED: log the error, decide:
+  - If transient failure (crash, timeout) and retry_count < 1 → worker auto-retries.
+  - Otherwise → re-route to a different provider or Claude.
+- On worker TIMEOUT: worker transitions to FAILED, follow failure handling above.
+- Continue monitor loop until all workers have reached a terminal state (COMPLETED, FAILED, CANCELLED).
+
+**Worker result integration:**
+- Review git diff from each completed worktree.
+- Check for file overlap between workers:
+  - No overlap → sequential merge (safe).
+  - Overlap detected → check if changes are non-conflicting (different line ranges).
+  - True conflict → spawn `agestra-moderator` to propose resolution, or resolve manually.
+- Merge clean results: `git merge --no-ff` each worker branch.
 
 ### Phase 4: Result Inspection
 
@@ -94,6 +155,7 @@ After each task completes:
    - Interface contracts match between components
    - Naming conventions are consistent
    - No conflicting changes to shared files
+   - Import/export chains are complete
 5. If issues found → craft a detailed correction prompt and re-assign to the same AI.
 6. If all checks pass:
    - For isolated tasks, call `agent_changes_accept` to merge changes
@@ -148,6 +210,7 @@ Provide a clear summary to the user:
 
 - What was requested
 - Execution mode used (supervised/autonomous)
+- Work mode used (Claude only / 다른 AI도 함께)
 - How tasks were distributed (which AI did what)
 - What changed (files modified, features added)
 - QA cycle: how many cycles ran, what was auto-fixed
@@ -208,9 +271,14 @@ The design document is the authority. If an AI's output conflicts with the desig
 </Principles>
 
 <Tool_Usage>
-- `provider_list` — check available providers at start
+- `environment_check` — full capability map at start (CLI tools, Ollama tiers, available modes)
+- `provider_list` — check available providers
 - `provider_health` — verify a specific provider's status
 - `ollama_models` — assess model capabilities for routing
+- `cli_worker_spawn` — spawn CLI AI in autonomous mode (worktree + preflight security)
+- `cli_worker_status` — check worker progress (FSM state, heartbeat, output tail)
+- `cli_worker_collect` — collect completed worker results (git diff, output, exit code)
+- `cli_worker_stop` — stop a running worker (SIGTERM → SIGKILL + worktree cleanup)
 - `agent_assign_task` — assign work to a specific provider (use `isolate: true` for git worktree isolation)
 - `agent_dispatch` — parallel task distribution with dependencies (use `auto_qa: true` for automatic QA)
 - `ai_compare` — get multiple perspectives on the same question
@@ -227,7 +295,7 @@ The design document is the authority. If an AI's output conflicts with the desig
 
 <Constraints>
 - Do NOT write, edit, or create files. Delegate all implementation.
-- Do NOT skip the user approval step before executing tasks.
+- Do NOT skip the user approval step before executing tasks (in supervised mode).
 - Do NOT assign complex tasks to small Ollama models.
 - Do NOT accept "simplified" or "partial" results from AIs.
 - Do NOT proceed to QA until you've inspected all results yourself.

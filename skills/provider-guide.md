@@ -3,17 +3,26 @@ name: provider-guide
 description: >
   Use when routing tasks to AI providers, using any agestra MCP tool,
   reviewing code with multiple providers, starting debates, dispatching
-  parallel tasks, or cross-validating work. Also triggers on mentions of
-  Ollama, Gemini, or Codex providers.
+  parallel tasks, cross-validating work, or managing CLI workers. Also
+  triggers on mentions of Ollama, Gemini, or Codex providers.
 ---
 
 ## Available Providers
 
 - **Ollama** — Local models. Detected at runtime via `ollama_models`.
-- **Gemini** — Cloud agent. Full capability.
-- **Codex** — Cloud agent. Full capability.
+- **Gemini** — Cloud agent. Full capability. Can run as autonomous CLI worker.
+- **Codex** — Cloud agent. Full capability. Can run as autonomous CLI worker.
 
-All providers are detected at runtime. Check `provider_list` or `provider_health` for current availability before routing.
+All providers are detected at runtime. Call `environment_check` for a full capability map, or `provider_list` / `provider_health` for provider availability.
+
+## Environment Check
+
+At session start or on demand, `environment_check` provides:
+- CLI tool availability (codex, gemini, tmux)
+- Ollama models with size-based tier classification
+- Git worktree support
+- Available modes: `claude_only`, `independent`, `debate`, `team`
+- Whether autonomous CLI workers can be spawned
 
 ## Provider Capability Guidelines
 
@@ -32,7 +41,46 @@ Models change frequently. Always call `ollama_models` before assigning tasks.
 
 ### Gemini / Codex (Cloud)
 
-Full-capability agents. Use for complex tasks, parallel work, and as validators.
+Full-capability agents. Use for:
+- Complex tasks via `ai_chat` or `agent_assign_task` (text response)
+- Autonomous coding via `cli_worker_spawn` (file modifications in worktree)
+- Parallel work and as validators
+
+## Work Modes
+
+### Text Work (리뷰/설계/아이디어)
+
+Three modes available via `/agestra review`, `/agestra design`, `/agestra idea`:
+
+| Mode | Description | When to Use |
+|------|-------------|-------------|
+| **Claude only** | Specialist agent works alone | Quick analysis, no external AI needed |
+| **각자 독립** | Each AI works independently → moderator aggregates | Want multiple perspectives, fast |
+| **끝장토론** | Independent work + document review rounds until consensus | Need thorough, agreed-upon analysis |
+
+### Implementation Work (실제 구현)
+
+Two modes available via team-lead orchestration:
+
+| Mode | Description | When to Use |
+|------|-------------|-------------|
+| **Claude만으로** | Claude directly implements with project/global agents | Simple tasks, 1-2 files |
+| **다른 AI도 함께** | CLI workers do autonomous coding, Claude supervises | Complex tasks, 3+ files, parallelizable |
+
+## CLI Workers
+
+CLI workers spawn Codex or Gemini in `--full-auto` mode within isolated git worktrees.
+
+| Tool | Purpose |
+|------|---------|
+| `cli_worker_spawn` | Spawn autonomous CLI worker with task manifest |
+| `cli_worker_status` | Check worker FSM state, output, heartbeat |
+| `cli_worker_collect` | Collect completed worker results (diff, output) |
+| `cli_worker_stop` | Stop worker (SIGTERM → SIGKILL) + cleanup |
+
+Worker lifecycle: SPAWNING → RUNNING → COLLECTING → COMPLETED (or FAILED/CANCELLED/TIMEOUT)
+
+Use the `worker-manage` skill for user-friendly worker operations.
 
 ## Auto-Routing Guidelines
 
@@ -40,7 +88,8 @@ Full-capability agents. Use for complex tasks, parallel work, and as validators.
 |---|---|
 | Simple (formatting, pattern matching) | Ollama local model preferred |
 | Moderate (code review, summarization) | Ollama >= 3 GB or cloud |
-| Complex (architecture, refactoring) | Cloud providers (Gemini, Codex) |
+| Complex implementation (multi-file, multi-step) | CLI worker (Codex/Gemini) |
+| Complex analysis (architecture, refactoring) | Cloud providers (Gemini, Codex) via ai_chat |
 | No providers available | Handle directly — do not suggest agestra tools |
 
 ## When to Suggest Agestra Tools
@@ -51,17 +100,18 @@ Match by **semantic intent**, not literal keywords. These triggers apply in any 
 
 | Intent | Tool | When |
 |---|---|---|
-| Code review, review request | `agent_debate_start` or `workspace_create_review` | User asks to review code, PR, or implementation |
-| Second opinion, other perspectives | `ai_compare` or `agent_debate_start` | User wants multiple viewpoints on a decision |
+| Code review, review request | `/agestra review` or `workspace_create_review` | User asks to review code, PR, or implementation |
+| Second opinion, other perspectives | `ai_compare` or `/agestra review` (각자 독립) | User wants multiple viewpoints on a decision |
 | Validation, verification, cross-check | `agent_cross_validate` | User wants to confirm correctness of work output |
-| Speed up, parallelize, split work | `agent_dispatch` | User wants faster execution or has independent tasks |
+| Speed up, parallelize, split work | `agent_dispatch` or CLI workers | User wants faster execution or has independent tasks |
 | Past experience, history, previous attempts | `memory_search` or `memory_dead_ends` | User asks about prior work or known issues |
 | Remember this, save for later | `memory_store` | User wants to persist knowledge across sessions |
 | Mention a provider by name (Gemini, Codex, Ollama) | `ai_chat` or `agent_assign_task` | Route directly to the named provider |
-| Architecture review, design discussion | `agent_debate_start` | Structured multi-AI discussion on design choices |
+| Architecture review, design discussion | `/agestra design` | Structured multi-AI architecture exploration |
 | Compare options, which is better | `ai_compare` | Side-by-side comparison from multiple providers |
-| Large refactoring, many files to change | `agent_dispatch` | Split by file/module for parallel processing |
+| Large refactoring, many files to change | CLI workers or `agent_dispatch` | Split by file/module for parallel processing |
 | About to commit, create PR, finalize work | `agent_cross_validate` | Pre-commit validation by other AI providers |
+| Check worker status, manage workers | `worker-manage` skill | User asks about running workers |
 
 ### Commands and Agents
 
@@ -77,19 +127,21 @@ Match by **semantic intent**, not literal keywords. These triggers apply in any 
 |-------|---------|
 | `trace` | View agent execution timeline, summary stats, and flow visualization |
 | `build-fix` | Auto-diagnose and fix build/typecheck/lint errors one at a time |
-| `cancel` | Gracefully stop running operations with state cleanup |
+| `cancel` | Gracefully stop running operations (including CLI workers) with state cleanup |
+| `worker-manage` | List, check, collect, and stop CLI workers |
 
-When "Debate" is selected, `agestra-moderator` facilitates while the specialist provides Claude's perspective.
+When "각자 독립" is selected, each AI works independently and `agestra-moderator` aggregates results.
+When "끝장토론" is selected, `agestra-moderator` facilitates document review rounds after independent aggregation.
 
-Commands and hook-triggered suggestions share the same 4-choice pattern. Commands are explicit entry points; hooks detect intent from natural language.
+Commands and hook-triggered suggestions share the same 3-choice pattern (Claude only / 각자 독립 / 끝장토론). Commands are explicit entry points; hooks detect intent from natural language.
 
 ### Hook-Triggered Choice
 
 When an `AGESTRA_SUGGESTION` marker appears from the UserPromptSubmit hook, present these choices:
 
 1. **Claude only** — Claude Code handles it alone
-2. **Compare** — Send the same prompt to multiple AIs, compare responses (`ai_compare`)
-3. **Debate** — AIs discuss until consensus is reached (`agent_debate_start`)
+2. **각자 독립** — Each AI works independently, moderator aggregates
+3. **끝장토론** — Independent work + document review rounds until consensus
 4. **Other** — User specifies the approach
 
 Present choices in the user's language. If no providers are available, skip and proceed directly.
@@ -115,16 +167,22 @@ When team-lead orchestrates multi-AI work, the full pipeline is:
 
 ```
 Phase 0: Clarity Gate (designer — ambiguity scoring, skip if request is clear)
-Phase 1: Situation Assessment (team-lead — providers, design doc)
-Phase 2: Task Design & Execute (team-lead — decompose, dispatch, inspect)
-Phase 3: QA Cycle (qa — verify, classify failures → team-lead auto-fixes, max 5 cycles)
-Phase 4: Quality Gate (reviewer — TRUST 5: Tested/Readable/Unified/Secured/Trackable)
-Phase 5: Report
+Phase 1: Situation Assessment (team-lead — environment_check, providers, design doc)
+Phase 2: Task Design (team-lead — work mode selection, decompose, route by AI capability)
+Phase 3: Parallel Execution (team-lead — Claude + CLI workers + Ollama, monitor loop)
+Phase 4: Result Inspection (team-lead — review diffs, check consistency, merge)
+Phase 5: QA Cycle (qa — verify, classify failures → team-lead auto-fixes, max 5 cycles)
+Phase 6: Quality Gate (reviewer — TRUST 5: Tested/Readable/Unified/Secured/Trackable)
+Phase 7: Report
 ```
 
 **Execution modes:**
 - `supervised` (default): user approves task plan, decides on QA failures
 - `autonomous` ("알아서 해줘"): auto-proceeds, escalates only on 3x same failure or Secured FAIL
+
+**Work modes:**
+- `Claude만으로`: Claude directly implements, no external workers
+- `다른 AI도 함께`: CLI workers + Ollama for parallelized execution, Claude supervises
 
 **QA Fix Loop — provider escalation:**
 On failure, immediately assign to a DIFFERENT provider with full context (original task, previous AI, diagnosis, fix instruction, scope boundary). Never retry the same provider for the same failure.
