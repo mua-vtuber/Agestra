@@ -71,6 +71,14 @@ Match by **semantic intent**, not literal keywords. These triggers apply in any 
 | `/agestra idea` | `agestra-ideator` | Improvement discovery and competitive analysis |
 | `/agestra design` | `agestra-designer` | Pre-implementation architecture exploration |
 
+### Utility Skills
+
+| Skill | Purpose |
+|-------|---------|
+| `trace` | View agent execution timeline, summary stats, and flow visualization |
+| `build-fix` | Auto-diagnose and fix build/typecheck/lint errors one at a time |
+| `cancel` | Gracefully stop running operations with state cleanup |
+
 When "Debate" is selected, `agestra-moderator` facilitates while the specialist provides Claude's perspective.
 
 Commands and hook-triggered suggestions share the same 4-choice pattern. Commands are explicit entry points; hooks detect intent from natural language.
@@ -100,6 +108,26 @@ Do NOT wait for rate limit reset.
 - Failed approaches are automatically recorded as `dead_end` nodes.
 - Call `memory_dead_ends` before starting work to avoid repeating failed strategies.
 - Call `memory_store` to save findings for future sessions.
+
+## Orchestration Pipeline
+
+When team-lead orchestrates multi-AI work, the full pipeline is:
+
+```
+Phase 0: Clarity Gate (designer — ambiguity scoring, skip if request is clear)
+Phase 1: Situation Assessment (team-lead — providers, design doc)
+Phase 2: Task Design & Execute (team-lead — decompose, dispatch, inspect)
+Phase 3: QA Cycle (qa — verify, classify failures → team-lead auto-fixes, max 5 cycles)
+Phase 4: Quality Gate (reviewer — TRUST 5: Tested/Readable/Unified/Secured/Trackable)
+Phase 5: Report
+```
+
+**Execution modes:**
+- `supervised` (default): user approves task plan, decides on QA failures
+- `autonomous` ("알아서 해줘"): auto-proceeds, escalates only on 3x same failure or Secured FAIL
+
+**QA Fix Loop — provider escalation:**
+On failure, immediately assign to a DIFFERENT provider with full context (original task, previous AI, diagnosis, fix instruction, scope boundary). Never retry the same provider for the same failure.
 
 ## Completion Verification
 

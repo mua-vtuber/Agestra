@@ -25,10 +25,19 @@ For each available provider (e.g., gemini, ollama):
 - Record their position
 
 **Claude turn:**
-- Call `agent_debate_turn` with `provider: "claude"`
-- Use `claude_comment` to inject the specialist agent's perspective
-  (reviewer's quality analysis, designer's architecture view, or ideator's research findings)
-- This ensures Claude participates as an independent voice, not just a moderator
+1. Before Claude's debate turn, spawn the specialist agent to produce independent analysis:
+   - Determine which specialist to invoke from the debate context:
+     - Review topic → spawn `agestra-reviewer` with the debate topic as review target
+     - Design topic → spawn `agestra-designer` with the topic as design subject
+     - Idea/improvement topic → spawn `agestra-ideator` with the topic as research seed
+   - Wait for the specialist agent to complete and collect its full output.
+
+2. Call `agent_debate_turn` with `provider: "claude"`
+   - Set `claude_comment` to the specialist agent's ACTUAL output (not a summary or paraphrase).
+   - This ensures Claude's debate contribution is real expert analysis from the specialist,
+     not the moderator's interpretation.
+
+3. The moderator remains neutral — it relays the specialist's work without modifying or editorializing.
 
 **Round summary:**
 After all turns in a round:

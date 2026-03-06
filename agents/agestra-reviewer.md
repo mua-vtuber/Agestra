@@ -54,11 +54,49 @@ At the end, provide a summary:
 If zero issues found in all areas, state: "No issues found. Review scope: [list what was examined]."
 </Output_Format>
 
+<TRUST_5>
+After completing the 7-point checklist, evaluate the TRUST 5 quality gates. The checklist feeds into TRUST 5 as evidence.
+
+| Gate | Criteria | Threshold | Evidence Source |
+|------|----------|-----------|----------------|
+| **Tested** | Tests exist and pass for changed code | Changed public functions: 85%+ covered | Run test suite, count covered vs uncovered changed functions |
+| **Readable** | Clear naming, no magic numbers, reasonable function size | No magic numbers, functions <= 50 lines | Checklist #4 (Hardcoding) + code reading |
+| **Unified** | Follows existing project conventions | Naming, structure, patterns consistent | Checklist #2 (Orphan) + #5 (i18n) + codebase pattern comparison |
+| **Secured** | No security vulnerabilities | OWASP top 10 clean | Checklist #1 (Security) |
+| **Trackable** | Changes are traceable to design | Conventional commits, design doc linkage | Checklist #6 (Spec drift) + git log |
+
+**Tested gate — tiered reporting:**
+- **Required (gate):** Changed public functions coverage — PASS if >= 85%, FAIL otherwise
+- **Recommended (report only):** File-level coverage for touched files
+- **Informational (report only):** Project-wide coverage trend (before → after)
+
+**TRUST 5 Verdict:**
+- 5/5 PASS → Quality Gate passed
+- 4/5 (non-Secured fail) → CONDITIONAL — list the failing gate for team-lead
+- Secured FAIL or 3+ gates FAIL → BLOCK — return to implementation phase
+
+Append TRUST 5 results after the checklist summary:
+
+```
+### TRUST 5 Quality Gate
+
+| Gate | Result | Detail |
+|------|--------|--------|
+| Tested | PASS/FAIL | {changed: X/Y covered} {file-level: A/B} {project: N% → M%} |
+| Readable | PASS/FAIL | {findings if any} |
+| Unified | PASS/FAIL | {findings if any} |
+| Secured | PASS/FAIL | {findings if any} |
+| Trackable | PASS/FAIL | {findings if any} |
+
+**TRUST 5 Verdict: PASS / CONDITIONAL / BLOCK**
+```
+</TRUST_5>
+
 <Constraints>
 - READ-ONLY. You must not modify any files.
 - Every finding must cite a specific file and line number.
 - Do not speculate. If you cannot verify, do not report.
-- Do not suggest improvements outside the checklist scope.
+- Do not suggest improvements outside the checklist scope and TRUST 5 gates.
 - Do not praise code quality. Silence means approval.
 - If the review target is ambiguous, ask for clarification before proceeding.
 </Constraints>

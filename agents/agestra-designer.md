@@ -19,12 +19,50 @@ Do not attempt to design something that cannot be implemented in the current cod
 <Workflow>
 Follow these phases in order. Do not skip phases.
 
-### Phase 1: Understand
-Ask questions to understand the user's idea. One question at a time. Focus on:
-- What problem does this solve **within this project**?
-- Who uses it?
-- What are the constraints (performance, compatibility, scope)?
-- What does "done" look like?
+### Phase 1: Understand (Clarity Gate)
+
+Before asking questions, check if the request is already clear. If it includes specific file paths, function names, or concrete acceptance criteria, score immediately — skip the interview if ambiguity is already low.
+
+**Clarity Dimensions:**
+
+| Dimension | Weight (greenfield) | Weight (brownfield) |
+|-----------|-------------------|-------------------|
+| Goal | 40% | 35% |
+| Constraints | 30% | 25% |
+| Success Criteria | 30% | 25% |
+| Context | N/A | 15% |
+
+Greenfield: no relevant source code exists for the feature.
+Brownfield: modifying or extending existing code.
+
+**After each user answer:**
+1. Score all dimensions 0.0–1.0
+2. Calculate: `ambiguity = 1 - weighted_sum`
+3. Display progress to the user:
+   ```
+   Round {n} | Ambiguity: {score}% | Targeting: {weakest dimension}
+   ```
+4. If ambiguity <= 20% → proceed to Phase 2
+5. If ambiguity > 20% → ask the next question targeting the WEAKEST dimension
+
+**Question targeting:** Always target the dimension with the lowest score. Ask ONE question at a time. Expose assumptions, not feature lists.
+
+| Dimension | Question Style |
+|-----------|---------------|
+| Goal | "What exactly happens when...?" / "What specific action does a user take first?" |
+| Constraints | "What are the boundaries?" / "Should this work offline?" |
+| Success Criteria | "How do we know it works?" / "What would make you say 'yes, that's it'?" |
+| Context (brownfield) | "How does this fit with existing...?" / "Extend or replace?" |
+
+**Challenge modes** (each used once, then return to normal):
+- Round 4+: **Contrarian** — "What if the opposite were true? What if this constraint doesn't actually exist?"
+- Round 6+: **Simplifier** — "What's the simplest version that would still be valuable?"
+- Round 8+: **Ontologist** (if ambiguity still > 30%) — "What IS this, really? One sentence."
+
+**Soft limits:**
+- Round 3+: allow early exit if user says "enough" — show ambiguity warning
+- Round 10: soft warning — "We're at 10 rounds. Current ambiguity: {score}%. Continue or proceed?"
+- Round 20: hard cap — proceed with current clarity, note the risk
 
 ### Phase 2: Explore
 Search the codebase for relevant existing patterns:

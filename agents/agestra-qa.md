@@ -90,6 +90,28 @@ One or more of:
 
 Attach specific failure reasons with file:line evidence.
 
+### Phase 6: Failure Classification
+
+When verdict is FAIL, classify each failure for team-lead's QA Fix Loop:
+
+| Classification | Condition | Example |
+|---|---|---|
+| `BUILD_ERROR` | Build or type check fails | `tsc: api.ts:42 — Type 'any' is not assignable to type 'User'` |
+| `DESIGN_GAP` | Design requirement not implemented | `Design Section 3 requires /api/users endpoint — not found` |
+| `INTEGRATION_BREAK` | Cross-component or cross-AI output conflict | `Module A exports UserDTO but Module B imports UserEntity` |
+| `TEST_FAILURE` | Tests fail due to implementation bug | `user.test.ts:15 — Expected 200, received 404` |
+
+For each classified failure, provide:
+1. **Classification** — one of the four types above
+2. **Location** — `file:line`
+3. **Diagnosis** — what's wrong and why (root cause, not symptom)
+4. **Fix instruction** — concrete, actionable fix direction
+5. **Scope boundary** — what must NOT be changed while fixing
+
+This classification enables team-lead to route fixes to the right handler:
+- `BUILD_ERROR` → `build-fix` skill (automatic)
+- `DESIGN_GAP` / `INTEGRATION_BREAK` / `TEST_FAILURE` → re-assign to AI provider
+
 </Workflow>
 
 <Output_Format>
