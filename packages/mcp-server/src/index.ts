@@ -4,18 +4,20 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
+import { fileURLToPath } from "url";
 import type { AIProvider } from "@agestra/core";
 import {
   parseProviderConfig,
   ProviderRegistry,
   JobManager,
   TraceWriter,
+  DEFAULT_OLLAMA_HOST,
 } from "@agestra/core";
 import { OllamaProvider } from "@agestra/provider-ollama";
 import { GeminiProvider } from "@agestra/provider-gemini";
 import { CodexProvider } from "@agestra/provider-codex";
 import { SessionManager } from "@agestra/agents";
-import { DocumentManager } from "@agestra/workspace";
+import { DocumentManager, DurableMessageQueue } from "@agestra/workspace";
 import { MemoryFacade } from "@agestra/memory";
 
 import { createServer, connectStdio } from "./server.js";
@@ -41,7 +43,7 @@ const factories: Record<string, (pc: { id: string; config?: Record<string, unkno
   ollama: (pc) =>
     new OllamaProvider({
       id: pc.id,
-      host: (pc.config?.host as string) || "http://localhost:11434",
+      host: (pc.config?.host as string) || DEFAULT_OLLAMA_HOST,
     }),
   "gemini-cli": (pc) =>
     new GeminiProvider({
@@ -151,7 +153,10 @@ async function main(): Promise<void> {
   const traceWriter = new TraceWriter(baseDir);
   traceWriter.cleanup(30); // Remove trace files older than 30 days
 
-  // 4. Create and connect MCP server
+  // 4. Create message queue
+  const messageQueue = new DurableMessageQueue(join(baseDir, ".agestra/messages"));
+
+  // 5. Create and connect MCP server
   const server = createServer({
     registry,
     sessionManager,
@@ -159,6 +164,7 @@ async function main(): Promise<void> {
     memoryFacade,
     jobManager,
     traceWriter,
+    messageQueue,
   });
 
   log(`Starting MCP server with ${registry.getAll().length} provider(s)...`);
@@ -167,12 +173,17 @@ async function main(): Promise<void> {
 }
 
 // Run when executed directly (not imported)
-const isDirectRun =
-  typeof process !== "undefined" &&
-  process.argv[1] &&
-  (process.argv[1].endsWith("/mcp-server/dist/index.js") ||
-   process.argv[1].endsWith("/mcp-server/src/index.ts") ||
-   process.argv[1].endsWith("/dist/bundle.js"));
+const isDirectRun = (() => {
+  if (typeof process === "undefined" || !process.argv[1]) return false;
+  try {
+    const thisFile = fileURLToPath(import.meta.url);
+    const runFile = process.argv[1];
+    // Exact match for this file, or bundled entry point
+    return runFile === thisFile || runFile.endsWith("/dist/bundle.js");
+  } catch {
+    return false;
+  }
+})();
 
 if (isDirectRun) {
   main().catch((err) => {

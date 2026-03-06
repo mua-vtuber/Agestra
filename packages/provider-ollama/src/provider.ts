@@ -9,6 +9,8 @@ import {
   ProviderUnavailableError,
   ProviderTimeoutError,
   ProviderExecutionError,
+  DEFAULT_OLLAMA_MAX_CONTEXT,
+  DEFAULT_OLLAMA_FALLBACK_MODEL,
 } from "@agestra/core";
 import { detectModels, type DetectedModel } from "./model-detector.js";
 
@@ -16,6 +18,7 @@ export interface OllamaProviderConfig {
   id: string;
   host: string;
   defaultModel?: string;
+  maxContext?: number;
   timeouts?: {
     default?: number;
     generate?: number;
@@ -28,14 +31,18 @@ export class OllamaProvider implements AIProvider {
   readonly type = "ollama";
   private host: string;
   private defaultModel: string;
+  private maxContext: number;
   private available = false;
+  private unavailableUntil = 0;
   private models: DetectedModel[] = [];
   private timeouts: { default: number; generate: number; chat: number };
+  private static readonly RATE_LIMIT_BACKOFF_MS = 60_000;
 
   constructor(config: OllamaProviderConfig) {
     this.id = config.id;
     this.host = config.host;
     this.defaultModel = config.defaultModel || "auto";
+    this.maxContext = config.maxContext ?? DEFAULT_OLLAMA_MAX_CONTEXT;
     this.timeouts = {
       default: config.timeouts?.default ?? 30_000,
       generate: config.timeouts?.generate ?? 300_000,
@@ -70,7 +77,7 @@ export class OllamaProvider implements AIProvider {
 
   getCapabilities(): ProviderCapability {
     return {
-      maxContext: 32768,
+      maxContext: this.maxContext,
       supportsSystemPrompt: true,
       supportsFiles: false,
       supportsStreaming: true,
@@ -86,6 +93,12 @@ export class OllamaProvider implements AIProvider {
   }
 
   isAvailable(): boolean {
+    if (this.unavailableUntil > 0 && Date.now() < this.unavailableUntil) {
+      return false;
+    }
+    if (this.unavailableUntil > 0 && Date.now() >= this.unavailableUntil) {
+      this.unavailableUntil = 0; // backoff expired — re-enable
+    }
     return this.available;
   }
 
@@ -117,10 +130,10 @@ export class OllamaProvider implements AIProvider {
         signal: controller.signal,
       });
       if (res.status === 429) {
-        this.available = false;
+        this.unavailableUntil = Date.now() + OllamaProvider.RATE_LIMIT_BACKOFF_MS;
         throw new ProviderUnavailableError(
           this.id,
-          "Rate limited (429) — provider deactivated",
+          `Rate limited (429) — temporarily deactivated for ${OllamaProvider.RATE_LIMIT_BACKOFF_MS / 1000}s`,
         );
       }
       if (!res.ok) {
@@ -148,7 +161,13 @@ export class OllamaProvider implements AIProvider {
 
   private selectModel(): string {
     if (this.defaultModel !== "auto") return this.defaultModel;
-    return this.models[0]?.name || "llama3";
+    if (this.models.length === 0) {
+      throw new ProviderUnavailableError(
+        this.id,
+        `No models detected. Install a model first (ollama pull ${DEFAULT_OLLAMA_FALLBACK_MODEL})`,
+      );
+    }
+    return this.models[0].name;
   }
 
   getModels(): DetectedModel[] {

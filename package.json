@@ -18,6 +18,7 @@
     ".claude-plugin/",
     "agents/",
     "commands/",
+    "hooks/",
     "skills/"
   ],
   "scripts": {

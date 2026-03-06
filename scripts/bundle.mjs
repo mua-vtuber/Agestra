@@ -4,13 +4,16 @@
 // Produces a single-file ESM bundle at dist/bundle.js
 
 import * as esbuild from "esbuild";
-import { cpSync, mkdirSync, statSync } from "fs";
-import { resolve, dirname } from "path";
+import { cpSync, mkdirSync, statSync, readFileSync, writeFileSync } from "fs";
+import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = resolve(__dirname, "..");
+
+// ── Read package.json version (single source of truth) ──────
+const pkg = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf-8"));
 
 // ── ESM compatibility banner ─────────────────────────────────
 // fts5-sql-bundle is CJS and uses require(), __dirname, __filename.
@@ -65,6 +68,10 @@ async function main() {
     sourcemap: true,
     banner: { js: banner },
     plugins: [sqlWasmExternalPlugin],
+    // Inject PROJECT_VERSION from package.json at build time
+    define: {
+      '"__PROJECT_VERSION__"': JSON.stringify(pkg.version),
+    },
     // Let esbuild resolve workspace packages via tsconfig paths
     // Node built-ins are automatically external for platform: "node"
   });
@@ -92,6 +99,15 @@ async function main() {
   // Copy sql-wasm.js (externalized Emscripten loader)
   cpSync(resolve(fts5Dist, "sql-wasm.js"), resolve(distDir, "sql-wasm.js"));
   console.log("  Copied sql-wasm.js to dist/");
+
+  // ── Sync plugin.json version ────────────────────────────
+  const pluginPath = resolve(ROOT, ".claude-plugin/plugin.json");
+  const plugin = JSON.parse(readFileSync(pluginPath, "utf-8"));
+  if (plugin.version !== pkg.version) {
+    plugin.version = pkg.version;
+    writeFileSync(pluginPath, JSON.stringify(plugin, null, 2) + "\n");
+    console.log(`  Synced plugin.json version to ${pkg.version}`);
+  }
 
   // ── Report bundle size ───────────────────────────────────
   const bundleStat = statSync(outfile);

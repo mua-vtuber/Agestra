@@ -7,8 +7,10 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { ProviderRegistry, JobManager } from "@agestra/core";
 import type { TraceWriter } from "@agestra/core";
+import { PROJECT_VERSION } from "@agestra/core";
 import type { SessionManager } from "@agestra/agents";
 import type { DocumentManager } from "@agestra/workspace";
+import type { MessageQueue } from "@agestra/workspace";
 import type { MemoryFacade } from "@agestra/memory";
 
 import * as aiChat from "./tools/ai-chat.js";
@@ -29,6 +31,7 @@ export interface ServerDependencies {
   memoryFacade: MemoryFacade;
   jobManager: JobManager;
   traceWriter?: TraceWriter;
+  messageQueue?: MessageQueue;
 }
 
 interface McpToolResult {
@@ -139,6 +142,7 @@ export async function dispatch(
     memoryFacade: deps.memoryFacade,
     jobManager: deps.jobManager,
     traceWriter: deps.traceWriter,
+    messageQueue: deps.messageQueue,
   };
 
   const result = await mod.handleTool(toolName, args, moduleDeps);
@@ -149,7 +153,7 @@ export async function dispatch(
 
 export function createServer(deps: ServerDependencies): Server {
   const server = new Server(
-    { name: "agestra", version: "4.1.1" },
+    { name: "agestra", version: PROJECT_VERSION },
     { capabilities: { tools: {} } },
   );
 

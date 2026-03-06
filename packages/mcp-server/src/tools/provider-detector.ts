@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import type { AIProvider, ProviderRegistry } from "@agestra/core";
-import { atomicWriteJsonSync } from "@agestra/core";
+import { atomicWriteJsonSync, DEFAULT_OLLAMA_HOST } from "@agestra/core";
 import { OllamaProvider } from "@agestra/provider-ollama";
 import { GeminiProvider } from "@agestra/provider-gemini";
 import { CodexProvider } from "@agestra/provider-codex";
@@ -33,7 +33,7 @@ export interface ProvidersConfigJson {
 const DEFAULT_CONFIGS: Record<string, { executionPolicy: string; config: Record<string, unknown> }> = {
   ollama: {
     executionPolicy: "workspace-write",
-    config: { host: "http://localhost:11434", defaultModel: "auto" },
+    config: { host: DEFAULT_OLLAMA_HOST, defaultModel: "auto" },
   },
   "gemini-cli": {
     executionPolicy: "read-only",
@@ -59,7 +59,7 @@ export async function detectProviders(): Promise<{
     {
       id: "ollama",
       type: "ollama",
-      provider: new OllamaProvider({ id: "ollama", host: "http://localhost:11434" }),
+      provider: new OllamaProvider({ id: "ollama", host: DEFAULT_OLLAMA_HOST }),
     },
     {
       id: "gemini",
