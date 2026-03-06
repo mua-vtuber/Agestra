@@ -1,5 +1,5 @@
 ---
-name: ideator
+name: agestra-ideator
 description: 유사 프로젝트 비교, 사용자 불만 수집, 개선점 발굴, 새 기능 탐색에 사용.
 model: claude-sonnet-4-6
 ---

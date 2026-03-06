@@ -50,10 +50,10 @@ Claude Code에서 실행:
 
 | 에이전트 | 모델 | 역할 |
 |----------|------|------|
-| `reviewer` | Opus | 엄격한 품질 검증 — 보안, 고아 시스템, 스펙 이탈, 테스트 공백 |
-| `designer` | Opus | 아키텍처 탐색 — 소크라테스식 질문, 트레이드오프 분석 |
-| `ideator` | Sonnet | 개선점 발굴 — 웹 리서치, 경쟁 분석 |
-| `moderator` | Sonnet | 토론 진행 — 중립, 턴 관리, 합의 판정 |
+| `agestra-reviewer` | Opus | 엄격한 품질 검증 — 보안, 고아 시스템, 스펙 이탈, 테스트 공백 |
+| `agestra-designer` | Opus | 아키텍처 탐색 — 소크라테스식 질문, 트레이드오프 분석 |
+| `agestra-ideator` | Sonnet | 개선점 발굴 — 웹 리서치, 경쟁 분석 |
+| `agestra-moderator` | Sonnet | 토론 진행 — 중립, 턴 관리, 합의 판정 |
 
 ---
 

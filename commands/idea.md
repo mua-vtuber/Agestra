@@ -16,7 +16,7 @@ If `$ARGUMENTS` is empty, ask the user what area to explore using AskUserQuestio
 
 Call `provider_list` to check which external AI providers (Ollama, Gemini, Codex) are currently available.
 
-If no providers are available, skip to running the `ideator` agent directly (Claude only).
+If no providers are available, skip to running the `agestra-ideator` agent directly (Claude only).
 
 ## Step 3: Present choices
 
@@ -24,14 +24,14 @@ Use AskUserQuestion to present these options (in the user's language):
 
 | Option | Description |
 |--------|-------------|
-| **Claude only** | Claude's ideator agent researches improvements alone |
+| **Claude only** | Claude's agestra-ideator agent researches improvements alone |
 | **Compare** | Multiple AIs independently research and suggest improvements |
 | **Debate** | AIs discuss potential improvements and priorities until consensus |
 
 ## Step 4: Execute based on selection
 
 ### If "Claude only":
-Spawn the `ideator` agent with the topic as context. The ideator will research similar projects, collect user complaints, build feature comparisons, and generate prioritized recommendations.
+Spawn the `agestra-ideator` agent with the topic as context. The ideator will research similar projects, collect user complaints, build feature comparisons, and generate prioritized recommendations.
 
 ### If "Compare":
 1. Call `ai_compare` with all available providers and `aggregate_provider` set to the most capable available provider. Use this prompt template:
@@ -43,10 +43,10 @@ Spawn the `ideator` agent with the topic as context. The ideator will research s
 2. The aggregated synthesis is included in the response. Present the unified improvement list to the user, noting which ideas were suggested by multiple providers.
 
 ### If "Debate":
-1. Spawn the `moderator` agent with this context:
+1. Spawn the `agestra-moderator` agent with this context:
 
    > Topic: Improvement opportunities for [topic]
-   > Specialist perspective: ideator — researches similar projects, collects user feedback, identifies gaps and opportunities. Focuses on actionable, prioritized suggestions.
+   > Specialist perspective: agestra-ideator — researches similar projects, collects user feedback, identifies gaps and opportunities. Focuses on actionable, prioritized suggestions.
    > Each participant should propose their top improvement ideas with rationale, then discuss priorities and feasibility.
 
 2. After the debate concludes and a document is produced, run a **document review round**:

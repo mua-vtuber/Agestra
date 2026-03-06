@@ -67,11 +67,11 @@ Match by **semantic intent**, not literal keywords. These triggers apply in any 
 
 | Command | Specialist Agent | Purpose |
 |---------|-----------------|---------|
-| `/agestra review` | `reviewer` | Post-implementation quality verification |
-| `/agestra idea` | `ideator` | Improvement discovery and competitive analysis |
-| `/agestra design` | `designer` | Pre-implementation architecture exploration |
+| `/agestra review` | `agestra-reviewer` | Post-implementation quality verification |
+| `/agestra idea` | `agestra-ideator` | Improvement discovery and competitive analysis |
+| `/agestra design` | `agestra-designer` | Pre-implementation architecture exploration |
 
-When "Debate" is selected, `moderator` facilitates while the specialist provides Claude's perspective.
+When "Debate" is selected, `agestra-moderator` facilitates while the specialist provides Claude's perspective.
 
 Commands and hook-triggered suggestions share the same 4-choice pattern. Commands are explicit entry points; hooks detect intent from natural language.
 

@@ -1,5 +1,5 @@
 ---
-name: moderator
+name: agestra-moderator
 description: 다중 AI 토론 진행. 턴 관리, 요약, 합의 판정. 도메인 의견 없이 진행만 담당.
 model: claude-sonnet-4-6
 ---

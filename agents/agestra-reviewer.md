@@ -1,5 +1,5 @@
 ---
-name: reviewer
+name: agestra-reviewer
 description: 코드 품질, 보안, 통합 완성도, 스펙 준수 여부를 검증할 때 사용. 엄격한 품질 검증자.
 model: claude-opus-4-6
 disallowedTools: Write, Edit, NotebookEdit

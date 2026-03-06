@@ -1,5 +1,5 @@
 ---
-name: designer
+name: agestra-designer
 description: 아키텍처 탐색, 설계 트레이드오프 논의, 구현 전 방향 수립에 사용. 소크라테스식 질문.
 model: claude-opus-4-6
 ---

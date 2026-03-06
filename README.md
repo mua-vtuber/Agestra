@@ -50,10 +50,10 @@ Each command presents a choice: **Claude only**, **Compare** (multiple AIs side-
 
 | Agent | Model | Role |
 |-------|-------|------|
-| `reviewer` | Opus | Strict quality verifier — security, orphans, spec drift, test gaps |
-| `designer` | Opus | Architecture explorer — Socratic questioning, trade-off analysis |
-| `ideator` | Sonnet | Improvement discoverer — web research, competitive analysis |
-| `moderator` | Sonnet | Debate facilitator — neutral, manages turns, judges consensus |
+| `agestra-reviewer` | Opus | Strict quality verifier — security, orphans, spec drift, test gaps |
+| `agestra-designer` | Opus | Architecture explorer — Socratic questioning, trade-off analysis |
+| `agestra-ideator` | Sonnet | Improvement discoverer — web research, competitive analysis |
+| `agestra-moderator` | Sonnet | Debate facilitator — neutral, manages turns, judges consensus |
 
 ---
 
