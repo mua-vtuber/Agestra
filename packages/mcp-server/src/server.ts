@@ -21,6 +21,7 @@ import * as ollamaManage from "./tools/ollama-manage.js";
 import * as memory from "./tools/memory.js";
 import * as jobs from "./tools/jobs.js";
 import * as trace from "./tools/trace.js";
+import * as environment from "./tools/environment.js";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ const TOOL_MODULES: ToolModule[] = [
   memory,
   jobs,
   trace,
+  environment,
 ];
 
 // ── Collect all tool definitions ──────────────────────────────
