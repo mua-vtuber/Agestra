@@ -14,3 +14,4 @@ export * from "./constants.js";
 export * from "./shell-sanitizer.js";
 export * from "./secret-scanner.js";
 export * from "./worktree-manager.js";
+export * from "./task-manifest.js";
