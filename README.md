@@ -67,7 +67,7 @@ Turborepo monorepo with 8 packages:
 | `@agestra/provider-ollama` | Ollama HTTP adapter with model detection |
 | `@agestra/provider-gemini` | Google Gemini CLI adapter |
 | `@agestra/provider-codex` | OpenAI Codex CLI adapter |
-| `@agestra/agents` | Debate engine, task dispatcher, cross-validator, session manager |
+| `@agestra/agents` | Debate engine, task dispatcher, cross-validator, task chain, auto-QA, file change tracker, session manager |
 | `@agestra/workspace` | Document manager for code review workflows |
 | `@agestra/memory` | GraphRAG — FTS5 + vector + knowledge graph hybrid search, dead-end tracking |
 | `@agestra/mcp-server` | MCP protocol layer, 39 tools, dispatch |
@@ -190,6 +190,7 @@ Stored under `.agestra/` (gitignored):
 | `.agestra/workspace/` | Code review documents |
 | `.agestra/memory.db` | GraphRAG SQLite database |
 | `.agestra/.jobs/` | Background job queue |
+| `.agestra/traces/` | Provider trace JSONL (auto-pruned after 30 days) |
 
 ---
 
@@ -209,7 +210,9 @@ npm run clean      # Remove dist/
 
 ```
 agestra/
-├── plugin.json              # Claude Code plugin manifest
+├── .claude-plugin/
+│   ├── plugin.json          # Claude Code plugin manifest
+│   └── marketplace.json     # Plugin marketplace metadata
 ├── commands/
 │   ├── review.md            # /agestra review — quality verification
 │   ├── idea.md              # /agestra idea — improvement discovery
@@ -218,7 +221,9 @@ agestra/
 │   ├── reviewer.md          # Strict quality verifier (Opus)
 │   ├── designer.md          # Architecture explorer (Opus)
 │   ├── ideator.md           # Improvement discoverer (Sonnet)
-│   └── moderator.md         # Debate facilitator (Sonnet)
+│   ├── moderator.md         # Debate facilitator (Sonnet)
+│   ├── qa.md                # QA verifier (project-internal)
+│   └── team-lead.md         # Task orchestrator (project-internal)
 ├── skills/
 │   └── provider-guide.md    # Provider usage guidelines (skill)
 ├── hooks/
