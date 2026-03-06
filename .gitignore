@@ -136,6 +136,8 @@ private-key*
 *_secret.*
 *.secret.*
 secret-*.*
+!secret-scanner.*
+!secret-scanner.test.*
 
 # Credential patterns in environment files
 *_secret=*
