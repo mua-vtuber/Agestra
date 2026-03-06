@@ -121,8 +121,28 @@ const AgentTaskChainStepSchema = z.object({
   override_prompt: z.string().optional().describe("Override the step's prompt"),
 });
 
+const AgentTaskChainStepAsyncSchema = z.object({
+  chain_id: z.string().describe("Chain ID"),
+  step_id: z.string().optional().describe("Specific step to start (default: next)"),
+  override_prompt: z.string().optional().describe("Override the step's prompt"),
+});
+
+const AgentTaskChainAwaitSchema = z.object({
+  chain_id: z.string().describe("Chain ID"),
+  step_id: z.string().describe("Step ID to await"),
+});
+
 const AgentTaskChainStatusSchema = z.object({
   chain_id: z.string().describe("Chain ID to check"),
+});
+
+const SessionListSchema = z.object({
+  type: z.enum(["all", "debate", "review", "task"]).optional()
+    .default("all")
+    .describe("Filter by session type (default: all)"),
+  status: z.enum(["all", "pending", "in_progress", "completed", "failed"]).optional()
+    .default("all")
+    .describe("Filter by session status (default: all)"),
 });
 
 // ── Types ────────────────────────────────────────────────────
@@ -502,9 +522,39 @@ export function getTools() {
       },
     },
     {
+      name: "agent_task_chain_step_async",
+      description:
+        "Start a task chain step in the background without blocking. Returns immediately so you can do other work. " +
+        "Use `agent_task_chain_await` to collect the result later, or `agent_task_chain_status` to check progress.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          chain_id: { type: "string", description: "Chain ID" },
+          step_id: { type: "string", description: "Specific step to start (default: next)" },
+          override_prompt: { type: "string", description: "Override the step's prompt" },
+        },
+        required: ["chain_id"],
+      },
+    },
+    {
+      name: "agent_task_chain_await",
+      description:
+        "Wait for a background step to complete and return its result. " +
+        "Use after `agent_task_chain_step_async` when you're ready to collect the output.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          chain_id: { type: "string", description: "Chain ID" },
+          step_id: { type: "string", description: "Step ID to await" },
+        },
+        required: ["chain_id", "step_id"],
+      },
+    },
+    {
       name: "agent_task_chain_status",
       description:
-        "Check the status of a task chain, including each step's completion status and output preview.",
+        "Check the status of a task chain, including each step's completion status and output preview. " +
+        "Also shows any steps currently running in the background.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -551,6 +601,27 @@ export function getTools() {
         required: ["task_id"],
       },
     },
+    {
+      name: "session_list",
+      description:
+        "List all agent sessions with optional filtering by type and status.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          type: {
+            type: "string",
+            enum: ["all", "debate", "review", "task"],
+            description: "Filter by session type (default: all)",
+          },
+          status: {
+            type: "string",
+            enum: ["all", "pending", "in_progress", "completed", "failed"],
+            description: "Filter by session status (default: all)",
+          },
+        },
+        required: [],
+      },
+    },
   ];
 }
 
@@ -591,16 +662,20 @@ async function handleDebateStart(
         maxRounds: parsed.max_rounds,
       };
 
-  // Fetch dead_end context from memory
-  deps.memoryFacade.search(parsed.topic, { nodeType: "dead_end" as any, limit: 5 })
-    .then((deadEnds) => {
-      if (deadEnds.length > 0) {
-        debateConfig.deadEndContext = deadEnds
-          .map((d) => `- ${d.node.content}`)
-          .join("\n");
-      }
-    })
-    .catch(() => { /* non-critical */ });
+  // Fetch dead_end context from memory (await to avoid race condition)
+  try {
+    const deadEnds = await deps.memoryFacade.search(
+      parsed.topic,
+      { nodeType: "dead_end" as any, limit: 5 },
+    );
+    if (deadEnds.length > 0) {
+      debateConfig.deadEndContext = deadEnds
+        .map((d) => `- ${d.node.content}`)
+        .join("\n");
+    }
+  } catch {
+    // dead-end loading failure is non-critical — debate continues without it
+  }
 
   // Run debate (non-blocking)
   const engine = new DebateEngine(getReadOnlyAdapter());
@@ -1340,6 +1415,110 @@ async function handleTaskChainStep(
   }
 }
 
+async function handleTaskChainStepAsync(
+  args: unknown,
+  deps: AgentToolDeps,
+): Promise<McpToolResult> {
+  const parsed = AgentTaskChainStepAsyncSchema.parse(args);
+
+  const engine = getTaskChainEngine(deps.registry);
+  const state = engine.getState(parsed.chain_id);
+  if (!state) {
+    return {
+      content: [{ type: "text", text: `Chain not found: ${parsed.chain_id}` }],
+      isError: true,
+    };
+  }
+
+  try {
+    const { stepId, status } = engine.startStepAsync(
+      parsed.chain_id,
+      parsed.step_id,
+      parsed.override_prompt,
+    );
+
+    const step = state.steps.find((s) => s.id === stepId);
+    const text =
+      `**Step started in background:** ${stepId}\n` +
+      `**Provider:** ${step?.provider ?? "unknown"}\n` +
+      `**Status:** ${status}\n\n` +
+      `Use \`agent_task_chain_await\` with step_id "${stepId}" to collect the result, ` +
+      `or \`agent_task_chain_status\` to check progress. You can continue other work in the meantime.`;
+
+    return { content: [{ type: "text", text }] };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      content: [{ type: "text", text: `**Async step start failed:** ${message}` }],
+      isError: true,
+    };
+  }
+}
+
+async function handleTaskChainAwait(
+  args: unknown,
+  deps: AgentToolDeps,
+): Promise<McpToolResult> {
+  const parsed = AgentTaskChainAwaitSchema.parse(args);
+
+  const engine = getTaskChainEngine(deps.registry);
+
+  if (!engine.isStepRunning(parsed.chain_id, parsed.step_id)) {
+    // Check if step already has a result
+    const state = engine.getState(parsed.chain_id);
+    if (!state) {
+      return {
+        content: [{ type: "text", text: `Chain not found: ${parsed.chain_id}` }],
+        isError: true,
+      };
+    }
+    const existing = state.results.find((r) => r.stepId === parsed.step_id);
+    if (existing) {
+      let text = `**Step already completed: ${existing.stepId}**\n**Status:** ${existing.status}\n\n${existing.output}`;
+      if (existing.validationResult) {
+        text += `\n\n---\n**Validation:** ${existing.validationResult.passed ? "PASS" : "FAIL"}\n${existing.validationResult.feedback}`;
+      }
+      return { content: [{ type: "text", text }] };
+    }
+    return {
+      content: [{ type: "text", text: `Step "${parsed.step_id}" is not running and has no result.` }],
+      isError: true,
+    };
+  }
+
+  try {
+    const result = await engine.awaitStep(parsed.chain_id, parsed.step_id);
+    if (!result) {
+      return {
+        content: [{ type: "text", text: `Step "${parsed.step_id}" finished before await.` }],
+        isError: true,
+      };
+    }
+
+    let text = `**Step completed: ${result.stepId}**\n**Provider:** ${result.provider}\n**Status:** ${result.status}\n\n${result.output}`;
+
+    if (result.validationResult) {
+      text += `\n\n---\n**Validation:** ${result.validationResult.passed ? "PASS" : "FAIL"}\n${result.validationResult.feedback}`;
+    }
+
+    const updatedState = engine.getState(parsed.chain_id)!;
+    text += `\n\n---\n**Chain status:** ${updatedState.status}`;
+
+    if (updatedState.status === "running" && updatedState.currentStepIndex < updatedState.steps.length) {
+      const nextStep = updatedState.steps[updatedState.currentStepIndex];
+      text += `\n**Next step:** ${nextStep.id} — ${nextStep.description} (${nextStep.provider})`;
+    }
+
+    return { content: [{ type: "text", text }] };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      content: [{ type: "text", text: `**Await failed:** ${message}` }],
+      isError: true,
+    };
+  }
+}
+
 async function handleTaskChainStatus(
   args: unknown,
   deps: AgentToolDeps,
@@ -1355,11 +1534,20 @@ async function handleTaskChainStatus(
     };
   }
 
-  let text = `**Chain ID:** ${state.id}\n**Status:** ${state.status}\n**Progress:** ${state.results.length}/${state.steps.length} steps\n\n`;
+  const runningSteps = engine.getPendingSteps(parsed.chain_id);
+
+  let text = `**Chain ID:** ${state.id}\n**Status:** ${state.status}\n**Progress:** ${state.results.length}/${state.steps.length} steps\n`;
+
+  if (runningSteps.length > 0) {
+    text += `**Running in background:** ${runningSteps.join(", ")}\n`;
+  }
+
+  text += "\n";
 
   for (const step of state.steps) {
     const result = state.results.find((r) => r.stepId === step.id);
-    const status = result ? result.status : "pending";
+    const isRunning = runningSteps.includes(step.id);
+    const status = result ? result.status : isRunning ? "running" : "pending";
     const preview = result ? result.output.slice(0, 100) + (result.output.length > 100 ? "..." : "") : "";
     text += `- **${step.id}** (${step.provider}): ${status}${preview ? ` — ${preview}` : ""}\n`;
   }
@@ -1439,6 +1627,34 @@ async function handleChangesReject(
   return { content: [{ type: "text", text }] };
 }
 
+async function handleSessionList(
+  args: unknown,
+  deps: AgentToolDeps,
+): Promise<McpToolResult> {
+  const parsed = SessionListSchema.parse(args);
+  let sessions = deps.sessionManager.listSessions();
+
+  if (parsed.type !== "all") {
+    sessions = sessions.filter((s: any) => s.type === parsed.type);
+  }
+  if (parsed.status !== "all") {
+    sessions = sessions.filter((s: any) => s.status === parsed.status);
+  }
+
+  if (sessions.length === 0) {
+    return {
+      content: [{ type: "text", text: "No sessions found matching the filter." }],
+    };
+  }
+
+  let text = `# Sessions\n\n**Total:** ${sessions.length}\n\n`;
+  for (const s of sessions) {
+    text += `- **${s.id}** | Type: ${s.type} | Status: ${s.status} | Created: ${s.createdAt}\n`;
+  }
+
+  return { content: [{ type: "text", text }] };
+}
+
 // ── Dispatcher ───────────────────────────────────────────────
 
 export async function handleTool(
@@ -1471,6 +1687,10 @@ export async function handleTool(
       return handleTaskChainCreate(args, deps);
     case "agent_task_chain_step":
       return handleTaskChainStep(args, deps);
+    case "agent_task_chain_step_async":
+      return handleTaskChainStepAsync(args, deps);
+    case "agent_task_chain_await":
+      return handleTaskChainAwait(args, deps);
     case "agent_task_chain_status":
       return handleTaskChainStatus(args, deps);
     case "agent_changes_review":
@@ -1479,6 +1699,8 @@ export async function handleTool(
       return handleChangesAccept(args, deps);
     case "agent_changes_reject":
       return handleChangesReject(args, deps);
+    case "session_list":
+      return handleSessionList(args, deps);
     default:
       return {
         content: [{ type: "text", text: `Unknown tool: ${name}` }],

@@ -43,6 +43,7 @@ export interface TaskChainCreateConfig {
 
 export class TaskChainEngine {
   private chains = new Map<string, TaskChainState>();
+  private pendingSteps = new Map<string, Promise<StepResult>>(); // stepKey -> running promise
 
   constructor(
     private chatAdapter: ChatAdapter,
@@ -178,6 +179,59 @@ export class TaskChainEngine {
 
     state.updatedAt = new Date().toISOString();
     return result;
+  }
+
+  /**
+   * Start a step in the background without blocking.
+   * Returns immediately with "pending" status.
+   * Use `isStepRunning` / `awaitStep` to check or wait for the result.
+   */
+  startStepAsync(
+    chainId: string,
+    stepId?: string,
+    overridePrompt?: string,
+  ): { stepId: string; status: "pending" } {
+    const state = this.chains.get(chainId);
+    if (!state) throw new Error(`Chain not found: ${chainId}`);
+
+    const step = stepId
+      ? state.steps.find((s) => s.id === stepId)
+      : state.steps[state.currentStepIndex];
+    if (!step) {
+      throw new Error(stepId ? `Step not found: ${stepId}` : "No more steps to execute");
+    }
+
+    const key = `${chainId}:${step.id}`;
+    if (this.pendingSteps.has(key)) {
+      return { stepId: step.id, status: "pending" };
+    }
+
+    const promise = this.executeStep(chainId, step.id, overridePrompt);
+    this.pendingSteps.set(key, promise);
+    promise.finally(() => this.pendingSteps.delete(key));
+
+    return { stepId: step.id, status: "pending" };
+  }
+
+  /** Check if a step is still running in the background. */
+  isStepRunning(chainId: string, stepId: string): boolean {
+    return this.pendingSteps.has(`${chainId}:${stepId}`);
+  }
+
+  /** Wait for a background step to complete and return its result. */
+  async awaitStep(chainId: string, stepId: string): Promise<StepResult | null> {
+    const key = `${chainId}:${stepId}`;
+    const promise = this.pendingSteps.get(key);
+    if (!promise) return null;
+    return promise;
+  }
+
+  /** Get all currently pending step keys for a chain. */
+  getPendingSteps(chainId: string): string[] {
+    const prefix = `${chainId}:`;
+    return [...this.pendingSteps.keys()]
+      .filter((k) => k.startsWith(prefix))
+      .map((k) => k.slice(prefix.length));
   }
 
   private buildContextPrompt(

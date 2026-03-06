@@ -117,15 +117,16 @@ describe("workspace tools", () => {
   });
 
   describe("getTools", () => {
-    it("should return 5 tool definitions", () => {
+    it("should return 6 tool definitions", () => {
       const tools = getTools();
-      expect(tools).toHaveLength(5);
+      expect(tools).toHaveLength(6);
       const names = tools.map((t) => t.name);
       expect(names).toContain("workspace_create_review");
       expect(names).toContain("workspace_request_review");
       expect(names).toContain("workspace_review_status");
       expect(names).toContain("workspace_add_comment");
       expect(names).toContain("workspace_read");
+      expect(names).toContain("workspace_list");
     });
 
     it("should have valid inputSchema for each tool", () => {

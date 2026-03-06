@@ -361,6 +361,7 @@ async function handleMemoryContext(
 
   const ctx = await deps.memoryFacade.getAssembledContext({
     query: parsed.query,
+    tokenBudget: parsed.token_budget,
   });
 
   return {

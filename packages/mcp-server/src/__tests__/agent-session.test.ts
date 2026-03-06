@@ -116,9 +116,9 @@ describe("agent-session tools", () => {
   });
 
   describe("getTools", () => {
-    it("should return 16 tool definitions", () => {
+    it("should return 19 tool definitions", () => {
       const tools = getTools();
-      expect(tools).toHaveLength(16);
+      expect(tools).toHaveLength(19);
       const names = tools.map((t) => t.name);
       expect(names).toContain("agent_debate_start");
       expect(names).toContain("agent_debate_status");
@@ -136,6 +136,7 @@ describe("agent-session tools", () => {
       expect(names).toContain("agent_changes_review");
       expect(names).toContain("agent_changes_accept");
       expect(names).toContain("agent_changes_reject");
+      expect(names).toContain("session_list");
     });
 
     it("should have valid inputSchema for each tool", () => {

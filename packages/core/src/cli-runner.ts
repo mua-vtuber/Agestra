@@ -58,8 +58,9 @@ export function runCli(options: CliRunOptions): Promise<CliRunResult> {
       proc.stdin.end();
     }
 
-    // SIGTERM -> wait 3s -> SIGKILL escalation
-    const timer = setTimeout(() => {
+    // Activity-based timeout: resets on each stdout/stderr output.
+    // Process is only killed after `timeout` ms of silence.
+    const killProc = () => {
       proc.kill("SIGTERM");
       setTimeout(() => {
         try {
@@ -70,10 +71,20 @@ export function runCli(options: CliRunOptions): Promise<CliRunResult> {
       }, 3000);
       reject(
         new Error(
-          `CLI timeout after ${timeout}ms: ${command} ${args.join(" ")}`,
+          `CLI timeout after ${timeout}ms of inactivity: ${command} ${args.join(" ")}`,
         ),
       );
-    }, timeout);
+    };
+
+    let timer = setTimeout(killProc, timeout);
+
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(killProc, timeout);
+    };
+
+    proc.stdout!.on("data", resetTimer);
+    proc.stderr!.on("data", resetTimer);
 
     proc.on("close", (code) => {
       clearTimeout(timer);

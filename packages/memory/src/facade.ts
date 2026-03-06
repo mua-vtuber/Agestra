@@ -404,6 +404,7 @@ export class MemoryFacade {
     recentHistory?: string;
     userMessage?: string;
     topic?: MemoryTopic;
+    tokenBudget?: number;
   }): Promise<AssembledContext> {
     this.ensureInitialized();
 
@@ -424,6 +425,7 @@ export class MemoryFacade {
       systemPrompt: params.systemPrompt,
       recentHistory: params.recentHistory,
       userMessage: params.userMessage,
+      totalBudgetOverride: params.tokenBudget,
     });
   }
 

@@ -137,9 +137,9 @@ function createDeps(
 
 describe("server", () => {
   describe("collectTools", () => {
-    it("should return exactly 39 tool definitions", () => {
+    it("should return exactly 43 tool definitions", () => {
       const tools = collectTools();
-      expect(tools).toHaveLength(39);
+      expect(tools).toHaveLength(43);
     });
 
     it("should have unique tool names", () => {
@@ -158,19 +158,21 @@ describe("server", () => {
       expect(names).toContain("ai_analyze_files");
       expect(names).toContain("ai_compare");
 
-      // agent-session tools (6)
+      // agent-session tools (subset check)
       expect(names).toContain("agent_debate_start");
       expect(names).toContain("agent_debate_status");
       expect(names).toContain("agent_assign_task");
       expect(names).toContain("agent_task_status");
       expect(names).toContain("agent_dispatch");
       expect(names).toContain("agent_cross_validate");
+      expect(names).toContain("session_list");
 
-      // workspace tools (4)
+      // workspace tools (5)
       expect(names).toContain("workspace_create_review");
       expect(names).toContain("workspace_request_review");
       expect(names).toContain("workspace_add_comment");
       expect(names).toContain("workspace_read");
+      expect(names).toContain("workspace_list");
 
       // provider-manage tools (2)
       expect(names).toContain("provider_list");

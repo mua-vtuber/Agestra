@@ -32,6 +32,12 @@ const WorkspaceReadSchema = z.object({
   doc_id: z.string().describe("Document ID to read"),
 });
 
+const WorkspaceListSchema = z.object({
+  status: z.enum(["all", "pending", "completed"]).optional()
+    .default("all")
+    .describe("Filter by review status (default: all)"),
+});
+
 // ── Types ────────────────────────────────────────────────────
 
 export interface WorkspaceToolDeps {
@@ -125,6 +131,22 @@ export function getTools() {
           doc_id: { type: "string", description: "Document ID to read" },
         },
         required: ["doc_id"],
+      },
+    },
+    {
+      name: "workspace_list",
+      description:
+        "List all review documents in the workspace.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          status: {
+            type: "string",
+            enum: ["all", "pending", "completed"],
+            description: "Filter by review status (default: all)",
+          },
+        },
+        required: [],
       },
     },
   ];
@@ -328,6 +350,28 @@ async function handleRead(
   };
 }
 
+async function handleList(
+  args: unknown,
+  deps: WorkspaceToolDeps,
+): Promise<McpToolResult> {
+  const parsed = WorkspaceListSchema.parse(args);
+  const docs = await deps.documentManager.list();
+
+  if (docs.length === 0) {
+    return {
+      content: [{ type: "text", text: "No review documents found." }],
+    };
+  }
+
+  let text = `# Review Documents\n\n**Total:** ${docs.length}\n\n`;
+  for (const doc of docs) {
+    const preview = doc.content.slice(0, 100).replace(/\n/g, " ");
+    text += `- **${doc.id}** — ${preview}...\n`;
+  }
+
+  return { content: [{ type: "text", text }] };
+}
+
 // ── Dispatcher ───────────────────────────────────────────────
 
 export async function handleTool(
@@ -346,6 +390,8 @@ export async function handleTool(
       return handleAddComment(args, deps);
     case "workspace_read":
       return handleRead(args, deps);
+    case "workspace_list":
+      return handleList(args, deps);
     default:
       return {
         content: [{ type: "text", text: `Unknown tool: ${name}` }],
