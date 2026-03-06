@@ -32,11 +32,7 @@ const WorkspaceReadSchema = z.object({
   doc_id: z.string().describe("Document ID to read"),
 });
 
-const WorkspaceListSchema = z.object({
-  status: z.enum(["all", "pending", "completed"]).optional()
-    .default("all")
-    .describe("Filter by review status (default: all)"),
-});
+const WorkspaceListSchema = z.object({});
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -139,13 +135,7 @@ export function getTools() {
         "List all review documents in the workspace.",
       inputSchema: {
         type: "object" as const,
-        properties: {
-          status: {
-            type: "string",
-            enum: ["all", "pending", "completed"],
-            description: "Filter by review status (default: all)",
-          },
-        },
+        properties: {},
         required: [],
       },
     },
@@ -354,7 +344,7 @@ async function handleList(
   args: unknown,
   deps: WorkspaceToolDeps,
 ): Promise<McpToolResult> {
-  const parsed = WorkspaceListSchema.parse(args);
+  WorkspaceListSchema.parse(args);
   const docs = await deps.documentManager.list();
 
   if (docs.length === 0) {

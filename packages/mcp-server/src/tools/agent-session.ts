@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import type { ProviderRegistry, JobManager } from "@agestra/core";
 import type { TraceWriter } from "@agestra/core";
 import type { SessionManager } from "@agestra/agents";
@@ -223,7 +223,7 @@ interface McpToolResult {
  */
 function captureGitSnapshot(): string {
   try {
-    return execSync("git diff --stat HEAD 2>/dev/null", { encoding: "utf-8", timeout: 5_000 }).trim();
+    return execFileSync("git", ["diff", "--stat", "HEAD"], { encoding: "utf-8", stdio: "pipe", timeout: 5_000 }).trim();
   } catch {
     return "";
   }
