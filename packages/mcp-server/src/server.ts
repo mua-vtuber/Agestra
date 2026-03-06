@@ -5,7 +5,7 @@ import {
   CallToolRequestSchema,
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { ProviderRegistry, JobManager } from "@agestra/core";
+import type { ProviderRegistry, JobManager, CliWorkerManager } from "@agestra/core";
 import type { TraceWriter } from "@agestra/core";
 import { PROJECT_VERSION } from "@agestra/core";
 import type { SessionManager } from "@agestra/agents";
@@ -22,6 +22,7 @@ import * as memory from "./tools/memory.js";
 import * as jobs from "./tools/jobs.js";
 import * as trace from "./tools/trace.js";
 import * as environment from "./tools/environment.js";
+import * as cliWorker from "./tools/cli-worker.js";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ export interface ServerDependencies {
   jobManager: JobManager;
   traceWriter?: TraceWriter;
   messageQueue?: MessageQueue;
+  cliWorkerManager?: CliWorkerManager;
 }
 
 interface McpToolResult {
@@ -65,6 +67,7 @@ const TOOL_MODULES: ToolModule[] = [
   jobs,
   trace,
   environment,
+  cliWorker,
 ];
 
 // ── Collect all tool definitions ──────────────────────────────
@@ -145,6 +148,7 @@ export async function dispatch(
     jobManager: deps.jobManager,
     traceWriter: deps.traceWriter,
     messageQueue: deps.messageQueue,
+    cliWorkerManager: deps.cliWorkerManager,
   };
 
   const result = await mod.handleTool(toolName, args, moduleDeps);
