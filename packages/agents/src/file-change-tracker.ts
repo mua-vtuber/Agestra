@@ -68,19 +68,13 @@ export class FileChangeTracker {
 
     // Clean up if leftover exists
     if (existsSync(worktreePath)) {
-      try {
-        this.execGit(["worktree", "remove", worktreePath, "--force"], this.baseDir);
-      } catch {
+      if (this.execGitSafe(["worktree", "remove", worktreePath, "--force"], this.baseDir) === null) {
         rmSync(worktreePath, { recursive: true, force: true });
       }
     }
 
     // Delete branch if leftover exists
-    try {
-      this.execGit(["branch", "-D", branch], this.baseDir);
-    } catch {
-      // branch doesn't exist, fine
-    }
+    this.execGitSafe(["branch", "-D", branch], this.baseDir);
 
     // Create worktree with new branch
     try {
@@ -170,19 +164,14 @@ export class FileChangeTracker {
     const info = this.worktrees.get(taskId);
     if (!info) return;
 
-    try {
-      this.execGit(["worktree", "remove", info.path, "--force"], this.baseDir);
-    } catch {
+    if (this.execGitSafe(["worktree", "remove", info.path, "--force"], this.baseDir) === null) {
       if (existsSync(info.path)) {
         rmSync(info.path, { recursive: true, force: true });
       }
     }
 
-    try {
-      this.execGit(["branch", "-D", info.branch], this.baseDir);
-    } catch {
-      // branch may already be deleted
-    }
+    // branch may already be deleted
+    this.execGitSafe(["branch", "-D", info.branch], this.baseDir);
 
     this.worktrees.delete(taskId);
   }
@@ -194,6 +183,9 @@ export class FileChangeTracker {
     return this.worktrees.get(taskId)?.path ?? null;
   }
 
+  /**
+   * Execute a git command. Returns stdout on success. Throws on failure.
+   */
   private execGit(args: string[], cwd: string): string {
     try {
       return execFileSync("git", args, {
@@ -202,8 +194,21 @@ export class FileChangeTracker {
         stdio: "pipe",
         timeout: 30_000,
       }).trim();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`git ${args[0]} failed in ${cwd}: ${message}`);
+    }
+  }
+
+  /**
+   * Execute a git command, returning null on failure instead of throwing.
+   * Use only for probe-style commands (e.g., checking if something exists).
+   */
+  private execGitSafe(args: string[], cwd: string): string | null {
+    try {
+      return this.execGit(args, cwd);
     } catch {
-      return "";
+      return null;
     }
   }
 

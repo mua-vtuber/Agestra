@@ -114,6 +114,15 @@ describe("FileChangeTracker", () => {
     });
   });
 
+  describe("captureChanges error propagation", () => {
+    it("should throw on a non-git directory", () => {
+      const nonGit = mkdtempSync(join(tmpdir(), "agestra-nongit-"));
+      const t = new FileChangeTracker(nonGit);
+      expect(() => t.captureChanges("task-1", "test")).toThrow(/git add failed/);
+      rmSync(nonGit, { recursive: true, force: true });
+    });
+  });
+
   describe("rejectChanges", () => {
     it("should discard worktree and branch", () => {
       const info = tracker.createWorktree("reject-test");
