@@ -45,18 +45,26 @@ Use AskUserQuestion to present these options (in the user's language):
 Spawn the `designer` agent with the subject as context. The designer will ask questions to understand intent, explore the codebase for existing patterns, propose 2-3 approaches with trade-offs, refine based on feedback, and produce a design document in `docs/plans/`.
 
 ### If "Compare":
-Call `ai_compare` with all available providers. Use this prompt template:
+1. Call `ai_compare` with all available providers and `aggregate_provider` set to the most capable available provider. Use this prompt template:
 
-> Propose an architecture approach for [subject]. Consider existing patterns in the codebase, trade-offs (complexity, performance, maintainability), and implementation steps. Present 2-3 distinct approaches with pros/cons for each.
->
-> Subject: [the design subject]
+   > Propose an architecture approach for [subject]. Consider existing patterns in the codebase, trade-offs (complexity, performance, maintainability), and implementation steps. Present 2-3 distinct approaches with pros/cons for each.
+   >
+   > Subject: [the design subject]
+
+2. The aggregated synthesis is included in the response. Present the unified architecture analysis to the user, highlighting where providers agree/disagree on approach.
 
 ### If "Debate":
-Spawn the `moderator` agent with this context:
+1. Spawn the `moderator` agent with this context:
 
-> Topic: Architecture design for [subject]
-> Specialist perspective: designer — pre-implementation architecture explorer using Socratic questioning and trade-off analysis. Focuses on finding the right approach before writing code.
-> Each participant should propose their preferred architecture approach with rationale, then discuss trade-offs and reach a recommendation.
+   > Topic: Architecture design for [subject]
+   > Specialist perspective: designer — pre-implementation architecture explorer using Socratic questioning and trade-off analysis. Focuses on finding the right approach before writing code.
+   > Each participant should propose their preferred architecture approach with rationale, then discuss trade-offs and reach a recommendation.
+
+2. After the debate concludes and a document is produced, run a **document review round**:
+   - Call `agent_debate_review` with the debate's conclusion document and all participating providers.
+   - If any provider disagrees, revise the document addressing their feedback and call `agent_debate_review` again.
+   - Repeat until all providers agree or 3 review rounds have been completed.
+   - Present the final reviewed document to the user.
 
 ### If "Other":
 Follow the user's specified approach.

@@ -41,7 +41,10 @@ export class CrossValidator {
   }
 
   private canValidate(providerId: string): boolean {
-    if (this.chatAdapter) return true;
+    if (this.chatAdapter) {
+      const cap = this.registry.getCapability(providerId);
+      return cap.tier === "agent" || cap.tier === "tool";
+    }
     return this.isAgentTier(providerId);
   }
 

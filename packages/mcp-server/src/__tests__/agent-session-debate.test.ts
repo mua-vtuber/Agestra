@@ -296,10 +296,10 @@ describe("agent-session turn-based debate tools", () => {
       );
       const debateId = createResult.content[0].text.match(/Debate ID:\*\* (\S+)/)![1];
 
-      // Conclude first
+      // Conclude first (this also deletes the debate state)
       await handleTool("agent_debate_conclude", { debate_id: debateId }, deps);
 
-      // Try a turn
+      // Try a turn — debate state was cleaned up after conclude
       const turnResult = await handleTool(
         "agent_debate_turn",
         { debate_id: debateId, provider: "gemini" },
@@ -307,7 +307,7 @@ describe("agent-session turn-based debate tools", () => {
       );
 
       expect(turnResult.isError).toBe(true);
-      expect(turnResult.content[0].text).toContain("concluded");
+      expect(turnResult.content[0].text).toContain("Debate not found");
     });
   });
 

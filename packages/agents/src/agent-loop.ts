@@ -19,6 +19,7 @@ export interface AgentLoopConfig {
   maxIterations?: number;
   timeoutMs?: number;
   tools?: AgentTool[];
+  systemPrompt?: string;
 }
 
 export interface AgentLoopResult {
@@ -65,8 +66,9 @@ interface OllamaChatResponse {
 const DEFAULT_MAX_ITERATIONS = 15;
 const MAX_MAX_ITERATIONS = 30;
 const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
+const MAX_TOOL_LOG_LENGTH = 2_000;
 
-const SYSTEM_PROMPT = `You are a coding assistant with access to tools for reading, writing, and searching files in a workspace. Use the provided tools when you need to inspect or modify code. When your task is complete, respond with your final answer without making any tool calls.
+const DEFAULT_SYSTEM_PROMPT = `You are a coding assistant with access to tools for reading, writing, and searching files in a workspace. Use the provided tools when you need to inspect or modify code. When your task is complete, respond with your final answer without making any tool calls.
 
 Guidelines:
 - Read files before modifying them to understand the existing code.
@@ -82,6 +84,7 @@ export class AgentLoop {
   private readonly baseDir: string;
   private readonly maxIterations: number;
   private readonly timeoutMs: number;
+  private readonly systemPrompt: string;
   private readonly tools: AgentTool[];
   private readonly toolDefs: OllamaToolDefinition[];
   private readonly toolMap: Map<string, AgentTool>;
@@ -95,6 +98,7 @@ export class AgentLoop {
       MAX_MAX_ITERATIONS,
     );
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.systemPrompt = config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
     this.tools = config.tools ?? createDefaultTools();
     this.toolDefs = toOllamaToolDefs(this.tools);
     this.toolMap = new Map(this.tools.map((t) => [t.name, t]));
@@ -106,7 +110,7 @@ export class AgentLoop {
     let accumulatedOutput = "";
 
     const messages: OllamaMessage[] = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: this.systemPrompt },
       { role: "user", content: task },
     ];
 
@@ -191,7 +195,7 @@ export class AgentLoop {
           iteration,
           toolName,
           arguments: parsedArgs,
-          result: result.length > 2000 ? result.slice(0, 2000) + "... [truncated in log]" : result,
+          result: result.length > MAX_TOOL_LOG_LENGTH ? result.slice(0, MAX_TOOL_LOG_LENGTH) + "... [truncated in log]" : result,
           durationMs: Date.now() - callStart,
         });
 

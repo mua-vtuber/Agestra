@@ -24,21 +24,21 @@ export interface AgentLoopChatAdapterConfig {
 
 // ── Helpers ───────────────────────────────────────────────────
 
+export interface OllamaConnectionInfo {
+  host: string;
+  model: string;
+}
+
 /**
  * Extract Ollama connection info from a provider if it's an OllamaProvider.
- * Returns null for non-Ollama providers.
- *
- * Follows the same pattern used in agent-session.ts:
- *   1. Check provider.type === "ollama"
- *   2. Call getConnectionInfo() if available
- *   3. Fall back to defaults
+ * Returns null for non-Ollama providers or providers without getConnectionInfo().
  */
-function getOllamaConnectionInfo(provider: AIProvider): { host: string; model: string } | null {
+export function getOllamaConnectionInfo(provider: AIProvider): OllamaConnectionInfo | null {
   if (provider.type !== "ollama") return null;
   if (typeof (provider as any).getConnectionInfo === "function") {
     return (provider as any).getConnectionInfo();
   }
-  return { host: "http://localhost:11434", model: "llama3" };
+  return null;
 }
 
 // ── Implementation ────────────────────────────────────────────

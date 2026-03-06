@@ -41,7 +41,7 @@ const DEFAULT_CAPABILITY: ProviderCapability = {
 };
 
 function mockProvider(id: string, type: string, response: string): AIProvider {
-  return {
+  const provider: AIProvider = {
     id,
     type,
     initialize: async () => {},
@@ -54,6 +54,10 @@ function mockProvider(id: string, type: string, response: string): AIProvider {
       provider: id,
     })),
   };
+  if (type === "ollama") {
+    (provider as any).getConnectionInfo = () => ({ host: "http://localhost:11434", model: "llama3" });
+  }
+  return provider;
 }
 
 function mockTool(name: string): AgentTool {

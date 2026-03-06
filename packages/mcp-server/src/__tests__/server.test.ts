@@ -137,9 +137,9 @@ function createDeps(
 
 describe("server", () => {
   describe("collectTools", () => {
-    it("should return exactly 32 tool definitions", () => {
+    it("should return exactly 39 tool definitions", () => {
       const tools = collectTools();
-      expect(tools).toHaveLength(32);
+      expect(tools).toHaveLength(39);
     });
 
     it("should have unique tool names", () => {

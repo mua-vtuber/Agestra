@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { execSync } from "child_process";
 import type { ProviderRegistry, JobManager } from "@agestra/core";
 import type { TraceWriter } from "@agestra/core";
 import type { SessionManager } from "@agestra/agents";
 import type { DocumentManager } from "@agestra/workspace";
 import type { MemoryFacade } from "@agestra/memory";
-import { DebateEngine, TaskDispatcher, CrossValidator, AgentLoop, AgentLoopChatAdapter, createDefaultTools, createReadOnlyTools } from "@agestra/agents";
+import { DebateEngine, TaskChainEngine, TaskDispatcher, CrossValidator, AgentLoop, AgentLoopChatAdapter, AutoQA, FileChangeTracker, createDefaultTools, createReadOnlyTools, getOllamaConnectionInfo, extractJsonFromText } from "@agestra/agents";
 import type { DebateConfig, EnhancedDebateConfig, AgentLoopFactory, ChatAdapter } from "@agestra/agents";
 import { buildCapabilityProfile } from "@agestra/core";
 
@@ -29,6 +30,8 @@ const AgentDispatchSchema = z.object({
   })).min(1).describe("List of task assignments"),
   merge_strategy: z.enum(["concatenate", "summarize", "debate"]).optional().default("concatenate").describe("How to merge results"),
   timeout_ms: z.number().int().positive().optional().describe("Overall timeout in ms (default: 600000)"),
+  auto_qa: z.boolean().optional().default(false).describe("Run AutoQA after all tasks complete"),
+  design_doc: z.string().optional().describe("Design document path for QA verification"),
 });
 
 const AgentCrossValidateSchema = z.object({
@@ -49,6 +52,7 @@ const AgentAssignTaskSchema = z.object({
   provider: z.string().describe("Provider ID to assign the task to"),
   task: z.string().describe("Task description"),
   files: z.array(z.string()).optional().describe("File paths relevant to the task"),
+  isolate: z.boolean().optional().describe("Run task in an isolated git worktree"),
 });
 
 const AgentTaskStatusSchema = z.object({
@@ -78,6 +82,49 @@ const AgentDebateConcludeSchema = z.object({
   })).optional().describe("Quality assessment of each provider's contribution"),
 });
 
+const AgentDebateReviewSchema = z.object({
+  document: z.string().describe("Document content to review"),
+  providers: z.array(z.string()).min(1).describe("Provider IDs to review the document"),
+  review_prompt: z.string().optional().describe("Custom review instructions (default: agree/disagree with feedback)"),
+  debate_id: z.string().optional().describe("Link reviews to an existing debate session's workspace document"),
+});
+
+const AgentChangesReviewSchema = z.object({
+  task_id: z.string().describe("Task ID to review changes for"),
+});
+
+const AgentChangesAcceptSchema = z.object({
+  task_id: z.string().describe("Task ID whose changes to accept"),
+  message: z.string().optional().describe("Commit message for the merge"),
+});
+
+const AgentChangesRejectSchema = z.object({
+  task_id: z.string().describe("Task ID whose changes to reject"),
+  reason: z.string().optional().describe("Reason for rejection"),
+});
+
+const AgentTaskChainCreateSchema = z.object({
+  steps: z.array(z.object({
+    id: z.string().describe("Unique step ID"),
+    description: z.string().describe("Step description"),
+    prompt: z.string().describe("Prompt for the provider"),
+    provider: z.string().describe("Provider ID to execute this step"),
+    dependsOn: z.array(z.string()).optional().describe("Step IDs this depends on"),
+    checkpoint: z.boolean().optional().describe("Pause after this step for review"),
+    validation: z.string().optional().describe("Validation prompt to verify output"),
+  })).min(1).describe("Task chain steps"),
+});
+
+const AgentTaskChainStepSchema = z.object({
+  chain_id: z.string().describe("Chain ID"),
+  step_id: z.string().optional().describe("Specific step to execute (default: next)"),
+  override_prompt: z.string().optional().describe("Override the step's prompt"),
+});
+
+const AgentTaskChainStatusSchema = z.object({
+  chain_id: z.string().describe("Chain ID to check"),
+});
+
 // ── Types ────────────────────────────────────────────────────
 
 export interface AgentToolDeps {
@@ -89,30 +136,38 @@ export interface AgentToolDeps {
   traceWriter?: TraceWriter;
 }
 
-// Shared adapter instances for tier-aware chat routing
-const readOnlyAdapter = new AgentLoopChatAdapter({
-  tools: createReadOnlyTools(),
-  baseDir: process.cwd(),
-});
+// Lazy-initialized adapter instances (deferred so process.cwd() is captured at first use)
+let _readOnlyAdapter: AgentLoopChatAdapter | undefined;
+let _fullAdapter: AgentLoopChatAdapter | undefined;
 
-const fullAdapter = new AgentLoopChatAdapter({
-  tools: createDefaultTools(),
-  baseDir: process.cwd(),
-});
+function getReadOnlyAdapter(): AgentLoopChatAdapter {
+  return _readOnlyAdapter ??= new AgentLoopChatAdapter({
+    tools: createReadOnlyTools(),
+    baseDir: process.cwd(),
+  });
+}
 
-// Shared debate engine instance for turn-based debates
-const debateEngine = new DebateEngine(readOnlyAdapter);
+function getFullAdapter(): AgentLoopChatAdapter {
+  return _fullAdapter ??= new AgentLoopChatAdapter({
+    tools: createDefaultTools(),
+    baseDir: process.cwd(),
+  });
+}
 
-/**
- * Extract Ollama connection info from a provider if it's an OllamaProvider.
- * Returns null for non-Ollama providers.
- */
-function getOllamaConnectionInfo(provider: { type: string; [k: string]: unknown }): { host: string; model: string } | null {
-  if (provider.type !== "ollama") return null;
-  if (typeof (provider as any).getConnectionInfo === "function") {
-    return (provider as any).getConnectionInfo();
-  }
-  return { host: "http://localhost:11434", model: "llama3" };
+// Shared debate engine instance for turn-based debates (lazy)
+let _debateEngine: DebateEngine | undefined;
+function getDebateEngine(): DebateEngine {
+  return _debateEngine ??= new DebateEngine(getReadOnlyAdapter());
+}
+
+let _fileChangeTracker: FileChangeTracker | undefined;
+function getFileChangeTracker(): FileChangeTracker {
+  return _fileChangeTracker ??= new FileChangeTracker(process.cwd());
+}
+
+let _taskChainEngine: TaskChainEngine | undefined;
+function getTaskChainEngine(registry: ProviderRegistry): TaskChainEngine {
+  return _taskChainEngine ??= new TaskChainEngine(getFullAdapter(), registry);
 }
 
 /**
@@ -125,7 +180,7 @@ function createAgentLoopFactory(deps: AgentToolDeps): AgentLoopFactory {
       const profile = buildCapabilityProfile(providerId, provider.getCapabilities());
       if (profile.tier !== "tool") return null;
 
-      const connInfo = getOllamaConnectionInfo(provider as any);
+      const connInfo = getOllamaConnectionInfo(provider);
       if (!connInfo) return null;
 
       return new AgentLoop({
@@ -140,6 +195,27 @@ function createAgentLoopFactory(deps: AgentToolDeps): AgentLoopFactory {
 interface McpToolResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
+}
+
+/**
+ * Capture a git diff snapshot for tracking file changes made by external AIs.
+ * Returns the short-stat summary or empty string if not a git repo.
+ */
+function captureGitSnapshot(): string {
+  try {
+    return execSync("git diff --stat HEAD 2>/dev/null", { encoding: "utf-8", timeout: 5_000 }).trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Compute file changes between two git snapshots.
+ */
+function computeFileChanges(before: string, after: string): string | undefined {
+  if (before === after) return undefined;
+  if (!after) return undefined;
+  return after;
 }
 
 // ── Tool definitions ─────────────────────────────────────────
@@ -196,6 +272,10 @@ export function getTools() {
             items: { type: "string" },
             description: "File paths relevant to the task",
           },
+          isolate: {
+            type: "boolean",
+            description: "Run in isolated git worktree",
+          },
         },
         required: ["provider", "task"],
       },
@@ -242,6 +322,14 @@ export function getTools() {
           timeout_ms: {
             type: "number",
             description: "Overall timeout in ms (default: 600000)",
+          },
+          auto_qa: {
+            type: "boolean",
+            description: "Run AutoQA after all tasks complete (default: false)",
+          },
+          design_doc: {
+            type: "string",
+            description: "Design document path for QA verification",
           },
         },
         required: ["assignments"],
@@ -343,6 +431,126 @@ export function getTools() {
         required: ["debate_id"],
       },
     },
+    {
+      name: "agent_debate_review",
+      description:
+        "Send a document to multiple providers for structured review. Each provider responds with agree/disagree and feedback. " +
+        "Use iteratively: review → revise document based on feedback → review again until all agree.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          document: { type: "string", description: "Document content to review" },
+          providers: {
+            type: "array",
+            items: { type: "string" },
+            description: "Provider IDs to review the document",
+          },
+          review_prompt: {
+            type: "string",
+            description: "Custom review instructions (default: agree/disagree with feedback)",
+          },
+          debate_id: {
+            type: "string",
+            description: "Link reviews to an existing debate's workspace document",
+          },
+        },
+        required: ["document", "providers"],
+      },
+    },
+    {
+      name: "agent_task_chain_create",
+      description:
+        "Create a multi-step task chain. Each step runs on a designated provider with context from previous steps. " +
+        "Supports dependency ordering, checkpoints (pausing for review), and validation.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          steps: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "Unique step ID" },
+                description: { type: "string", description: "Step description" },
+                prompt: { type: "string", description: "Prompt for the provider" },
+                provider: { type: "string", description: "Provider ID" },
+                dependsOn: { type: "array", items: { type: "string" }, description: "Dependency step IDs" },
+                checkpoint: { type: "boolean", description: "Pause after this step" },
+                validation: { type: "string", description: "Validation prompt" },
+              },
+              required: ["id", "description", "prompt", "provider"],
+            },
+            description: "Task chain steps",
+          },
+        },
+        required: ["steps"],
+      },
+    },
+    {
+      name: "agent_task_chain_step",
+      description:
+        "Execute the next (or specified) step in a task chain. Returns the step result including output and validation. " +
+        "If the step has checkpoint: true, the chain pauses after execution for team-lead review.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          chain_id: { type: "string", description: "Chain ID" },
+          step_id: { type: "string", description: "Specific step to execute (default: next)" },
+          override_prompt: { type: "string", description: "Override the step's prompt" },
+        },
+        required: ["chain_id"],
+      },
+    },
+    {
+      name: "agent_task_chain_status",
+      description:
+        "Check the status of a task chain, including each step's completion status and output preview.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          chain_id: { type: "string", description: "Chain ID to check" },
+        },
+        required: ["chain_id"],
+      },
+    },
+    {
+      name: "agent_changes_review",
+      description:
+        "Review file changes made by an external AI in an isolated worktree. Shows diff stat and full diff.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          task_id: { type: "string", description: "Task ID to review" },
+        },
+        required: ["task_id"],
+      },
+    },
+    {
+      name: "agent_changes_accept",
+      description:
+        "Accept and merge file changes from an isolated worktree back to the main branch.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          task_id: { type: "string", description: "Task ID whose changes to accept" },
+          message: { type: "string", description: "Commit message" },
+        },
+        required: ["task_id"],
+      },
+    },
+    {
+      name: "agent_changes_reject",
+      description:
+        "Reject file changes and clean up the isolated worktree.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          task_id: { type: "string", description: "Task ID whose changes to reject" },
+          reason: { type: "string", description: "Reason for rejection" },
+        },
+        required: ["task_id"],
+      },
+    },
   ];
 }
 
@@ -395,7 +603,7 @@ async function handleDebateStart(
     .catch(() => { /* non-critical */ });
 
   // Run debate (non-blocking)
-  const engine = new DebateEngine(readOnlyAdapter);
+  const engine = new DebateEngine(getReadOnlyAdapter());
   engine.run(debateConfig).then((result) => {
     deps.sessionManager.completeSession(session.id, result.transcript);
     deps.memoryFacade.store({
@@ -495,10 +703,25 @@ async function handleAssignTask(
   } : undefined;
 
   const startTime = performance.now();
+  const snapshotBefore = captureGitSnapshot();
+
+  // Create isolated worktree if requested
+  let worktreePath: string | null = null;
+  if (parsed.isolate) {
+    const tracker = getFileChangeTracker();
+    const wt = tracker.createWorktree(session.id);
+    if (wt) {
+      worktreePath = wt.path;
+    }
+  }
 
   try {
-    const response = await fullAdapter.chat(provider, { prompt });
+    const response = await getFullAdapter().chat(provider, { prompt });
     const latencyMs = Math.round(performance.now() - startTime);
+
+    // Track file changes made by external AI
+    const snapshotAfter = captureGitSnapshot();
+    const fileChanges = computeFileChanges(snapshotBefore, snapshotAfter);
 
     if (deps.traceWriter) {
       deps.traceWriter.write({
@@ -515,13 +738,19 @@ async function handleAssignTask(
 
     deps.sessionManager.completeSession(session.id, response.text);
 
+    let resultText = `**Task completed**\n**Task ID:** ${session.id}\n**Provider:** ${parsed.provider}\n\n${response.text}`;
+    if (fileChanges) {
+      resultText += `\n\n---\n\n**File changes detected:**\n\`\`\`\n${fileChanges}\n\`\`\``;
+    }
+
+    if (worktreePath) {
+      const tracker = getFileChangeTracker();
+      const report = tracker.captureChanges(session.id, parsed.provider);
+      resultText += `\n\n---\n**Worktree:** ${worktreePath}\n**Branch:** ${report.branch}\n**Changes:** ${report.changes.length} files\n\`\`\`\n${report.diffStat}\n\`\`\`\nUse \`agent_changes_review\` to see full diff, then \`agent_changes_accept\` or \`agent_changes_reject\`.`;
+    }
+
     return {
-      content: [
-        {
-          type: "text",
-          text: `**Task completed**\n**Task ID:** ${session.id}\n**Provider:** ${parsed.provider}\n\n${response.text}`,
-        },
-      ],
+      content: [{ type: "text", text: resultText }],
     };
   } catch (err) {
     const latencyMs = Math.round(performance.now() - startTime);
@@ -627,6 +856,19 @@ async function handleDispatch(
       }
     }
 
+    // Run AutoQA if requested
+    if (parsed.auto_qa) {
+      const qa = new AutoQA(process.cwd());
+      const qaResult = await qa.run({ designDoc: parsed.design_doc });
+      text += `\n\n---\n\n## AutoQA Results\n\n${qaResult.summary}\n\n`;
+      if (!qaResult.buildPassed) {
+        text += `### Build Output\n\`\`\`\n${qaResult.buildOutput}\n\`\`\`\n\n`;
+      }
+      if (!qaResult.testsPassed) {
+        text += `### Test Output\n\`\`\`\n${qaResult.testOutput}\n\`\`\`\n\n`;
+      }
+    }
+
     return { content: [{ type: "text", text }] };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -643,7 +885,7 @@ async function handleCrossValidate(
 ): Promise<McpToolResult> {
   const parsed = AgentCrossValidateSchema.parse(args);
 
-  const validator = new CrossValidator(deps.registry, readOnlyAdapter);
+  const validator = new CrossValidator(deps.registry, getReadOnlyAdapter());
 
   try {
     const result = await validator.validate({
@@ -720,7 +962,7 @@ async function handleDebateCreate(
   }
 
   // Create debate state
-  const state = debateEngine.create({
+  const state = getDebateEngine().create({
     topic: parsed.topic,
     providerIds: parsed.providers,
     goal: parsed.goal,
@@ -743,7 +985,7 @@ async function handleDebateTurn(
 ): Promise<McpToolResult> {
   const parsed = AgentDebateTurnSchema.parse(args);
 
-  const state = debateEngine.getState(parsed.debate_id);
+  const state = getDebateEngine().getState(parsed.debate_id);
   if (!state) {
     return {
       content: [{ type: "text", text: `Debate not found: ${parsed.debate_id}` }],
@@ -766,7 +1008,7 @@ async function handleDebateTurn(
       };
     }
 
-    debateEngine.addTurn(parsed.debate_id, "claude", parsed.claude_comment);
+    getDebateEngine().addTurn(parsed.debate_id, "claude", parsed.claude_comment);
     if (state.documentId) {
       await deps.documentManager.addComment(state.documentId, {
         author: "Claude",
@@ -789,7 +1031,7 @@ async function handleDebateTurn(
 
   // Inject Claude's comment first if provided
   if (parsed.claude_comment) {
-    debateEngine.addTurn(parsed.debate_id, "claude", parsed.claude_comment);
+    getDebateEngine().addTurn(parsed.debate_id, "claude", parsed.claude_comment);
     if (state.documentId) {
       await deps.documentManager.addComment(state.documentId, {
         author: "Claude",
@@ -799,7 +1041,7 @@ async function handleDebateTurn(
   }
 
   // Build prompt with full conversation history and call provider
-  const prompt = debateEngine.buildPromptForProvider(parsed.debate_id, parsed.provider);
+  const prompt = getDebateEngine().buildPromptForProvider(parsed.debate_id, parsed.provider);
 
   // Build reasoning metadata for trace
   const reasoning = deps.traceWriter ? {
@@ -813,7 +1055,7 @@ async function handleDebateTurn(
 
   let response;
   try {
-    response = await readOnlyAdapter.chat(provider, { prompt });
+    response = await getReadOnlyAdapter().chat(provider, { prompt });
   } catch (err) {
     const latencyMs = Math.round(performance.now() - startTime);
     const message = err instanceof Error ? err.message : String(err);
@@ -851,7 +1093,7 @@ async function handleDebateTurn(
   }
 
   // Record provider's response as a turn
-  debateEngine.addTurn(parsed.debate_id, parsed.provider, response.text);
+  getDebateEngine().addTurn(parsed.debate_id, parsed.provider, response.text);
   if (state.documentId) {
     await deps.documentManager.addComment(state.documentId, {
       author: parsed.provider,
@@ -875,7 +1117,7 @@ async function handleDebateConclude(
 ): Promise<McpToolResult> {
   const parsed = AgentDebateConcludeSchema.parse(args);
 
-  const state = debateEngine.getState(parsed.debate_id);
+  const state = getDebateEngine().getState(parsed.debate_id);
   if (!state) {
     return {
       content: [{ type: "text", text: `Debate not found: ${parsed.debate_id}` }],
@@ -885,7 +1127,7 @@ async function handleDebateConclude(
 
   // Add summary as final turn if provided
   if (parsed.summary) {
-    debateEngine.addTurn(parsed.debate_id, "claude", parsed.summary);
+    getDebateEngine().addTurn(parsed.debate_id, "claude", parsed.summary);
     if (state.documentId) {
       await deps.documentManager.addComment(state.documentId, {
         author: "Claude (Summary)",
@@ -895,7 +1137,7 @@ async function handleDebateConclude(
   }
 
   // Mark concluded
-  debateEngine.conclude(parsed.debate_id);
+  getDebateEngine().conclude(parsed.debate_id);
 
   // Write quality scores to trace if provided
   if (parsed.quality_scores && deps.traceWriter) {
@@ -908,8 +1150,11 @@ async function handleDebateConclude(
     }
   }
 
-  // Build transcript
-  const transcript = debateEngine.buildTurnTranscript(parsed.debate_id);
+  // Build transcript before cleanup
+  const transcript = getDebateEngine().buildTurnTranscript(parsed.debate_id);
+
+  // Release debate state to prevent memory leak
+  getDebateEngine().delete(parsed.debate_id);
 
   // Store in memory
   deps.memoryFacade.store({
@@ -926,6 +1171,270 @@ async function handleDebateConclude(
     text += `\n**Document ID:** ${state.documentId}`;
   }
   text += `\n\n---\n\n${transcript}`;
+
+  return { content: [{ type: "text", text }] };
+}
+
+// ── Document review handler ──────────────────────────────────
+
+async function handleDebateReview(
+  args: unknown,
+  deps: AgentToolDeps,
+): Promise<McpToolResult> {
+  const parsed = AgentDebateReviewSchema.parse(args);
+
+  const defaultReviewPrompt = [
+    "Review the following document carefully.",
+    "Respond with JSON only:",
+    "{ \"agrees\": true/false, \"feedback\": \"specific issues or why you agree\", \"suggestions\": \"concrete changes if you disagree, or omit\" }",
+  ].join("\n");
+
+  const reviewPrompt = parsed.review_prompt ?? defaultReviewPrompt;
+
+  // Get linked debate's document ID for comment tracking
+  let documentId: string | undefined;
+  if (parsed.debate_id) {
+    const state = getDebateEngine().getState(parsed.debate_id);
+    documentId = state?.documentId;
+  }
+
+  const reviews: Array<{ provider: string; agrees: boolean; feedback: string; suggestions?: string }> = [];
+
+  // Send document to each provider for review (in parallel)
+  const reviewPromises = parsed.providers.map(async (providerId) => {
+    if (providerId === "claude") return null; // Claude reviews are added via claude_comment
+
+    const provider = deps.registry.get(providerId);
+    const prompt = `${reviewPrompt}\n\n---\n\n${parsed.document}`;
+
+    try {
+      const response = await getReadOnlyAdapter().chat(provider, { prompt });
+
+      // Parse structured response
+      const jsonParsed = extractJsonFromText(response.text) as Record<string, unknown> | null;
+      const review = {
+        provider: providerId,
+        agrees: jsonParsed ? Boolean(jsonParsed.agrees) : false,
+        feedback: jsonParsed ? String(jsonParsed.feedback ?? "") : response.text,
+        suggestions: jsonParsed?.suggestions ? String(jsonParsed.suggestions) : undefined,
+      };
+
+      // Track in workspace document if linked
+      if (documentId) {
+        await deps.documentManager.addComment(documentId, {
+          author: `${providerId} (review)`,
+          content: `**${review.agrees ? "AGREES" : "DISAGREES"}**\n\n${review.feedback}${review.suggestions ? `\n\n**Suggestions:** ${review.suggestions}` : ""}`,
+        });
+      }
+
+      return review;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        provider: providerId,
+        agrees: false,
+        feedback: `[Review failed: ${message}]`,
+      };
+    }
+  });
+
+  const settled = await Promise.all(reviewPromises);
+  for (const review of settled) {
+    if (review) reviews.push(review);
+  }
+
+  const allAgree = reviews.length > 0 && reviews.every((r) => r.agrees);
+
+  // Build output
+  let text = `**Document Review** — ${allAgree ? "ALL AGREE ✓" : "DISAGREEMENTS FOUND"}\n\n`;
+  for (const review of reviews) {
+    text += `### ${review.provider}: ${review.agrees ? "AGREES" : "DISAGREES"}\n`;
+    text += `${review.feedback}\n`;
+    if (review.suggestions) {
+      text += `**Suggestions:** ${review.suggestions}\n`;
+    }
+    text += "\n";
+  }
+
+  if (!allAgree) {
+    text += `---\n\n**Next step:** Revise the document addressing the feedback above, then call \`agent_debate_review\` again to check for consensus.`;
+  }
+
+  return { content: [{ type: "text", text }] };
+}
+
+// ── Task chain handlers ──────────────────────────────────────
+
+async function handleTaskChainCreate(
+  args: unknown,
+  deps: AgentToolDeps,
+): Promise<McpToolResult> {
+  const parsed = AgentTaskChainCreateSchema.parse(args);
+
+  // Validate providers exist (skip "claude")
+  for (const step of parsed.steps) {
+    if (step.provider !== "claude") deps.registry.get(step.provider);
+  }
+
+  const engine = getTaskChainEngine(deps.registry);
+  const state = engine.create({ steps: parsed.steps });
+
+  const stepsPreview = parsed.steps
+    .map((s) => `  ${s.id}: ${s.description} → ${s.provider}${s.checkpoint ? " [checkpoint]" : ""}`)
+    .join("\n");
+
+  return {
+    content: [
+      {
+        type: "text",
+        text: `**Task chain created**\n**Chain ID:** ${state.id}\n**Steps:** ${parsed.steps.length}\n\n${stepsPreview}\n\nUse \`agent_task_chain_step\` to execute steps.`,
+      },
+    ],
+  };
+}
+
+async function handleTaskChainStep(
+  args: unknown,
+  deps: AgentToolDeps,
+): Promise<McpToolResult> {
+  const parsed = AgentTaskChainStepSchema.parse(args);
+
+  const engine = getTaskChainEngine(deps.registry);
+  const state = engine.getState(parsed.chain_id);
+  if (!state) {
+    return {
+      content: [{ type: "text", text: `Chain not found: ${parsed.chain_id}` }],
+      isError: true,
+    };
+  }
+
+  try {
+    const result = await engine.executeStep(parsed.chain_id, parsed.step_id, parsed.override_prompt);
+
+    let text = `**Step executed: ${result.stepId}**\n**Provider:** ${result.provider}\n**Status:** ${result.status}\n\n${result.output}`;
+
+    if (result.validationResult) {
+      text += `\n\n---\n**Validation:** ${result.validationResult.passed ? "PASS" : "FAIL"}\n${result.validationResult.feedback}`;
+    }
+
+    // Check updated chain state
+    const updatedState = engine.getState(parsed.chain_id)!;
+    text += `\n\n---\n**Chain status:** ${updatedState.status}`;
+
+    if (updatedState.status === "paused") {
+      text += `\n\n⚠️ **Checkpoint reached.** Review the output above before calling \`agent_task_chain_step\` to continue.`;
+    }
+
+    if (updatedState.status === "running" && updatedState.currentStepIndex < updatedState.steps.length) {
+      const nextStep = updatedState.steps[updatedState.currentStepIndex];
+      text += `\n**Next step:** ${nextStep.id} — ${nextStep.description} (${nextStep.provider})`;
+    }
+
+    return { content: [{ type: "text", text }] };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      content: [{ type: "text", text: `**Step execution failed:** ${message}` }],
+      isError: true,
+    };
+  }
+}
+
+async function handleTaskChainStatus(
+  args: unknown,
+  deps: AgentToolDeps,
+): Promise<McpToolResult> {
+  const parsed = AgentTaskChainStatusSchema.parse(args);
+
+  const engine = getTaskChainEngine(deps.registry);
+  const state = engine.getState(parsed.chain_id);
+  if (!state) {
+    return {
+      content: [{ type: "text", text: `Chain not found: ${parsed.chain_id}` }],
+      isError: true,
+    };
+  }
+
+  let text = `**Chain ID:** ${state.id}\n**Status:** ${state.status}\n**Progress:** ${state.results.length}/${state.steps.length} steps\n\n`;
+
+  for (const step of state.steps) {
+    const result = state.results.find((r) => r.stepId === step.id);
+    const status = result ? result.status : "pending";
+    const preview = result ? result.output.slice(0, 100) + (result.output.length > 100 ? "..." : "") : "";
+    text += `- **${step.id}** (${step.provider}): ${status}${preview ? ` — ${preview}` : ""}\n`;
+  }
+
+  return { content: [{ type: "text", text }] };
+}
+
+
+async function handleChangesReview(
+  args: unknown,
+  deps: AgentToolDeps,
+): Promise<McpToolResult> {
+  const parsed = AgentChangesReviewSchema.parse(args);
+
+  const tracker = getFileChangeTracker();
+  const worktreePath = tracker.getWorktreePath(parsed.task_id);
+  if (!worktreePath) {
+    return {
+      content: [{ type: "text", text: `No isolated worktree found for task: ${parsed.task_id}` }],
+      isError: true,
+    };
+  }
+
+  const report = tracker.captureChanges(parsed.task_id, "unknown");
+
+  let text = `**File Change Review**\n**Task ID:** ${parsed.task_id}\n**Worktree:** ${report.worktreePath}\n**Branch:** ${report.branch}\n**Files changed:** ${report.changes.length}\n\n`;
+
+  if (report.changes.length === 0) {
+    text += "No changes detected.";
+  } else {
+    text += `### Diff Stat\n\`\`\`\n${report.diffStat}\n\`\`\`\n\n### Changes\n\`\`\`diff\n${report.fullDiff}\n\`\`\``;
+  }
+
+  return { content: [{ type: "text", text }] };
+}
+
+async function handleChangesAccept(
+  args: unknown,
+  deps: AgentToolDeps,
+): Promise<McpToolResult> {
+  const parsed = AgentChangesAcceptSchema.parse(args);
+
+  const tracker = getFileChangeTracker();
+  try {
+    const result = tracker.acceptChanges(parsed.task_id, parsed.message);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `**Changes accepted**\n**Task ID:** ${parsed.task_id}\n**Merged files:** ${result.merged.length}\n\n${result.merged.map((f) => `- ${f}`).join("\n") || "(no files)"}`,
+        },
+      ],
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      content: [{ type: "text", text: `**Accept failed:** ${message}` }],
+      isError: true,
+    };
+  }
+}
+
+async function handleChangesReject(
+  args: unknown,
+  deps: AgentToolDeps,
+): Promise<McpToolResult> {
+  const parsed = AgentChangesRejectSchema.parse(args);
+
+  const tracker = getFileChangeTracker();
+  tracker.rejectChanges(parsed.task_id);
+
+  let text = `**Changes rejected**\n**Task ID:** ${parsed.task_id}`;
+  if (parsed.reason) {
+    text += `\n**Reason:** ${parsed.reason}`;
+  }
 
   return { content: [{ type: "text", text }] };
 }
@@ -956,6 +1465,20 @@ export async function handleTool(
       return handleDebateTurn(args, deps);
     case "agent_debate_conclude":
       return handleDebateConclude(args, deps);
+    case "agent_debate_review":
+      return handleDebateReview(args, deps);
+    case "agent_task_chain_create":
+      return handleTaskChainCreate(args, deps);
+    case "agent_task_chain_step":
+      return handleTaskChainStep(args, deps);
+    case "agent_task_chain_status":
+      return handleTaskChainStatus(args, deps);
+    case "agent_changes_review":
+      return handleChangesReview(args, deps);
+    case "agent_changes_accept":
+      return handleChangesAccept(args, deps);
+    case "agent_changes_reject":
+      return handleChangesReject(args, deps);
     default:
       return {
         content: [{ type: "text", text: `Unknown tool: ${name}` }],

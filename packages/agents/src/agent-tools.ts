@@ -13,10 +13,16 @@ import { runCli } from "@agestra/core";
 
 // ── Types ────────────────────────────────────────────────────
 
+export interface AgentToolParam {
+  type: string;
+  description: string;
+  required?: boolean;
+}
+
 export interface AgentTool {
   name: string;
   description: string;
-  parameters: Record<string, unknown>;
+  parameters: Record<string, AgentToolParam>;
   execute(args: Record<string, unknown>, baseDir: string): Promise<string>;
 }
 
@@ -58,7 +64,7 @@ const fileReadTool: AgentTool = {
   name: "file_read",
   description: "Read the contents of a file. Returns the text content.",
   parameters: {
-    path: { type: "string", description: "File path relative to workspace" },
+    path: { type: "string", description: "File path relative to workspace", required: true },
     offset: { type: "number", description: "Line offset to start reading from (0-based)" },
     limit: { type: "number", description: "Maximum number of lines to read" },
   },
@@ -87,8 +93,8 @@ const fileWriteTool: AgentTool = {
   name: "file_write",
   description: "Write content to a file. Creates parent directories if needed. Overwrites existing files.",
   parameters: {
-    path: { type: "string", description: "File path relative to workspace" },
-    content: { type: "string", description: "Content to write" },
+    path: { type: "string", description: "File path relative to workspace", required: true },
+    content: { type: "string", description: "Content to write", required: true },
   },
   async execute(args, baseDir) {
     const filePath = safePath(String(args.path ?? ""), baseDir);
@@ -142,7 +148,7 @@ const grepSearchTool: AgentTool = {
   name: "grep_search",
   description: "Search file contents with a regex pattern. Returns matching lines with file paths and line numbers.",
   parameters: {
-    pattern: { type: "string", description: "Regular expression pattern to search for" },
+    pattern: { type: "string", description: "Regular expression pattern to search for", required: true },
     path: { type: "string", description: "Directory or file path to search in (default: '.')" },
     glob: { type: "string", description: "Glob pattern to filter files (e.g., '*.ts')" },
   },
@@ -150,7 +156,11 @@ const grepSearchTool: AgentTool = {
     const pattern = String(args.pattern ?? "");
     const searchPath = safePath(String(args.path ?? "."), baseDir);
 
-    const grepArgs = ["-rn", "--include", args.glob ? String(args.glob) : "*", pattern, searchPath];
+    const grepArgs = ["-rn"];
+    if (args.glob) {
+      grepArgs.push("--include", String(args.glob));
+    }
+    grepArgs.push(pattern, searchPath);
 
     try {
       const result = await runCli({
@@ -176,7 +186,7 @@ const shellExecTool: AgentTool = {
   name: "shell_exec",
   description: "Execute a shell command. Only safe, read-oriented commands are allowed (ls, cat, head, tail, wc, diff, find, grep, sort, uniq, node, npm).",
   parameters: {
-    command: { type: "string", description: "Shell command to execute" },
+    command: { type: "string", description: "Shell command to execute", required: true },
   },
   async execute(args, baseDir) {
     const command = String(args.command ?? "").trim();
@@ -244,9 +254,9 @@ export function toOllamaToolDefs(tools: AgentTool[]): OllamaToolDefinition[] {
       parameters: {
         type: "object" as const,
         properties: t.parameters,
-        required: Object.keys(t.parameters).filter(
-          (k) => !["offset", "limit", "recursive", "glob"].includes(k),
-        ),
+        required: Object.entries(t.parameters)
+          .filter(([, param]) => param.required === true)
+          .map(([k]) => k),
       },
     },
   }));
