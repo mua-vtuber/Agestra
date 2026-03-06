@@ -110,7 +110,7 @@ describe("WorktreeManager", () => {
 
       // First remove throws, force remove succeeds
       let callCount = 0;
-      mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
+      mockExecFileSync.mockImplementation(((_cmd: string, args: string[]) => {
         if (Array.isArray(args) && args[0] === "worktree" && args[1] === "remove") {
           callCount++;
           if (callCount === 1) throw new Error("locked");
