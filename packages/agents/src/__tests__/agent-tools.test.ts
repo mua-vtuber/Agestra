@@ -198,5 +198,36 @@ describe("AgentTools", () => {
       const result = await tool().execute({ command: "" }, baseDir);
       expect(result).toContain("Error");
     });
+
+    it("blocks shell metacharacters (pipe)", async () => {
+      const result = await tool().execute({ command: "ls | grep foo" }, baseDir);
+      expect(result).toContain("Error");
+      expect(result).toContain("metacharacters");
+    });
+
+    it("blocks shell metacharacters (semicolon chaining)", async () => {
+      const result = await tool().execute({ command: "ls; rm -rf /" }, baseDir);
+      expect(result).toContain("Error");
+    });
+
+    it("blocks node interpreter", async () => {
+      const result = await tool().execute({ command: "node -e 'process.exit()'" }, baseDir);
+      expect(result).toContain("not allowed");
+    });
+
+    it("blocks npm command", async () => {
+      const result = await tool().execute({ command: "npm run malicious" }, baseDir);
+      expect(result).toContain("not allowed");
+    });
+
+    it("blocks backtick subshell", async () => {
+      const result = await tool().execute({ command: "ls `whoami`" }, baseDir);
+      expect(result).toContain("Error");
+    });
+
+    it("blocks dollar-paren subshell", async () => {
+      const result = await tool().execute({ command: "ls $(whoami)" }, baseDir);
+      expect(result).toContain("Error");
+    });
   });
 });

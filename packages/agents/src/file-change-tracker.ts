@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync, rmSync, mkdirSync } from "fs";
 import { join } from "path";
 
@@ -41,7 +41,7 @@ export class FileChangeTracker {
    */
   isGitRepo(): boolean {
     try {
-      execSync("git rev-parse --is-inside-work-tree", {
+      execFileSync("git", ["rev-parse", "--is-inside-work-tree"], {
         cwd: this.baseDir,
         stdio: "pipe",
         timeout: 5_000,
@@ -69,11 +69,7 @@ export class FileChangeTracker {
     // Clean up if leftover exists
     if (existsSync(worktreePath)) {
       try {
-        execSync(`git worktree remove "${worktreePath}" --force`, {
-          cwd: this.baseDir,
-          stdio: "pipe",
-          timeout: 10_000,
-        });
+        this.execGit(["worktree", "remove", worktreePath, "--force"], this.baseDir);
       } catch {
         rmSync(worktreePath, { recursive: true, force: true });
       }
@@ -81,22 +77,14 @@ export class FileChangeTracker {
 
     // Delete branch if leftover exists
     try {
-      execSync(`git branch -D "${branch}" 2>/dev/null`, {
-        cwd: this.baseDir,
-        stdio: "pipe",
-        timeout: 5_000,
-      });
+      this.execGit(["branch", "-D", branch], this.baseDir);
     } catch {
       // branch doesn't exist, fine
     }
 
     // Create worktree with new branch
     try {
-      execSync(`git worktree add -b "${branch}" "${worktreePath}" HEAD`, {
-        cwd: this.baseDir,
-        stdio: "pipe",
-        timeout: 30_000,
-      });
+      this.execGit(["worktree", "add", "-b", branch, worktreePath, "HEAD"], this.baseDir);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`Failed to create worktree: ${msg}`);
@@ -115,11 +103,11 @@ export class FileChangeTracker {
     const cwd = info?.path ?? this.baseDir;
 
     // Stage untracked files with intent-to-add so they appear in diffs
-    this.exec("git add -N .", cwd);
+    this.execGit(["add", "-N", "."], cwd);
 
-    const diffStat = this.exec("git diff --stat HEAD", cwd);
-    const fullDiff = this.exec("git diff HEAD", cwd);
-    const numstat = this.exec("git diff --numstat HEAD", cwd);
+    const diffStat = this.execGit(["diff", "--stat", "HEAD"], cwd);
+    const fullDiff = this.execGit(["diff", "HEAD"], cwd);
+    const numstat = this.execGit(["diff", "--numstat", "HEAD"], cwd);
 
     const changes = this.parseNumstat(numstat);
 
@@ -145,22 +133,22 @@ export class FileChangeTracker {
     const commitMsg = message ?? `agestra: task ${taskId}`;
 
     // Stage and commit all changes in worktree
-    this.exec("git add -A", cwd);
+    this.execGit(["add", "-A"], cwd);
 
     // Check if there's anything to commit
-    const status = this.exec("git status --porcelain", cwd);
+    const status = this.execGit(["status", "--porcelain"], cwd);
     if (!status.trim()) {
       this.cleanup(taskId);
       return { merged: [] };
     }
 
-    this.exec(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`, cwd);
+    this.execGit(["commit", "-m", commitMsg], cwd);
 
     // Get the list of changed files before merge
     const files = status.trim().split("\n").map((line) => line.trim().slice(3));
 
     // Merge into the current branch of the main repo
-    this.exec(`git merge "${info.branch}" --no-edit`, this.baseDir);
+    this.execGit(["merge", info.branch, "--no-edit"], this.baseDir);
 
     // Cleanup
     this.cleanup(taskId);
@@ -183,11 +171,7 @@ export class FileChangeTracker {
     if (!info) return;
 
     try {
-      execSync(`git worktree remove "${info.path}" --force`, {
-        cwd: this.baseDir,
-        stdio: "pipe",
-        timeout: 10_000,
-      });
+      this.execGit(["worktree", "remove", info.path, "--force"], this.baseDir);
     } catch {
       if (existsSync(info.path)) {
         rmSync(info.path, { recursive: true, force: true });
@@ -195,11 +179,7 @@ export class FileChangeTracker {
     }
 
     try {
-      execSync(`git branch -D "${info.branch}"`, {
-        cwd: this.baseDir,
-        stdio: "pipe",
-        timeout: 5_000,
-      });
+      this.execGit(["branch", "-D", info.branch], this.baseDir);
     } catch {
       // branch may already be deleted
     }
@@ -214,9 +194,9 @@ export class FileChangeTracker {
     return this.worktrees.get(taskId)?.path ?? null;
   }
 
-  private exec(command: string, cwd: string): string {
+  private execGit(args: string[], cwd: string): string {
     try {
-      return execSync(command, {
+      return execFileSync("git", args, {
         cwd,
         encoding: "utf-8",
         stdio: "pipe",

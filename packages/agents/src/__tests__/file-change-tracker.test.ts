@@ -96,6 +96,22 @@ describe("FileChangeTracker", () => {
       const content = execSync("cat accepted.txt", { cwd: repoDir, encoding: "utf-8" });
       expect(content.trim()).toBe("accepted content");
     });
+
+    it("should safely handle special characters in commit messages", () => {
+      const info = tracker.createWorktree("special-chars-test");
+      expect(info).not.toBeNull();
+
+      writeFileSync(join(info!.path, "special.txt"), "test\n");
+
+      // Commit messages with shell-dangerous characters should not cause injection
+      const dangerousMsg = 'fix: handle $HOME and `whoami` and "quotes"';
+      const result = tracker.acceptChanges("special-chars-test", dangerousMsg);
+      expect(result.merged).toContain("special.txt");
+
+      // Verify commit message was stored literally
+      const log = execSync("git log -1 --format=%s", { cwd: repoDir, encoding: "utf-8" });
+      expect(log.trim()).toBe(dangerousMsg);
+    });
   });
 
   describe("rejectChanges", () => {

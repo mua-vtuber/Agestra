@@ -10,3 +10,5 @@ export * from "./job-types.js";
 export * from "./job-manager.js";
 export * from "./path-guard.js";
 export * from "./trace.js";
+export * from "./constants.js";
+export * from "./shell-sanitizer.js";

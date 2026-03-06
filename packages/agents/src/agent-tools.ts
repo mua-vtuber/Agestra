@@ -10,6 +10,7 @@ import { join, resolve } from "path";
 import { safePath } from "@agestra/core";
 import { atomicWriteSync } from "@agestra/core";
 import { runCli } from "@agestra/core";
+import { validateShellCommand, SAFE_SHELL_COMMANDS } from "@agestra/core";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -47,16 +48,8 @@ const MAX_GREP_MATCHES = 100;
 const MAX_SHELL_OUTPUT = 100 * 1024;     // 100 KB
 const SHELL_TIMEOUT = 30_000;            // 30 seconds
 
-const SHELL_ALLOWED_COMMANDS = new Set([
-  "ls", "cat", "head", "tail", "wc", "diff", "find",
-  "grep", "sort", "uniq", "node", "npm",
-]);
-
-const SHELL_BLOCKED_PATTERNS = [
-  "rm", "sudo", "chmod", "chown", "mkfs", "dd",
-  "curl", "wget", "kill", "pkill", "killall",
-  "mv", "cp",  // block by default for safety
-];
+// Shell command validation is delegated to @agestra/core/shell-sanitizer
+// (SAFE_SHELL_COMMANDS, BLOCKED_COMMANDS, validateShellCommand)
 
 // ── Tool implementations ────────────────────────────────────
 
@@ -184,7 +177,7 @@ const grepSearchTool: AgentTool = {
 
 const shellExecTool: AgentTool = {
   name: "shell_exec",
-  description: "Execute a shell command. Only safe, read-oriented commands are allowed (ls, cat, head, tail, wc, diff, find, grep, sort, uniq, node, npm).",
+  description: `Execute a shell command. Only safe, read-oriented commands are allowed (${[...SAFE_SHELL_COMMANDS].join(", ")}). Shell operators (pipes, chaining, subshells) are blocked.`,
   parameters: {
     command: { type: "string", description: "Shell command to execute", required: true },
   },
@@ -194,25 +187,21 @@ const shellExecTool: AgentTool = {
       return "Error: empty command";
     }
 
-    // Extract the base command (first word)
-    const baseCommand = command.split(/\s+/)[0].replace(/^.*\//, ""); // strip path prefix
-
-    if (!SHELL_ALLOWED_COMMANDS.has(baseCommand)) {
-      return `Error: command '${baseCommand}' is not allowed. Allowed: ${[...SHELL_ALLOWED_COMMANDS].join(", ")}`;
+    // Single validation function from @agestra/core
+    const validation = validateShellCommand(command);
+    if (!validation.valid) {
+      return `Error: ${validation.error}`;
     }
 
-    // Check for blocked patterns anywhere in the command
-    for (const blocked of SHELL_BLOCKED_PATTERNS) {
-      const regex = new RegExp(`(^|[\\s|;&])${blocked}(\\s|$|;|&|\\|)`, "i");
-      if (regex.test(command)) {
-        return `Error: command contains blocked pattern '${blocked}'`;
-      }
-    }
+    // Direct execution (no sh -c — prevents shell interpretation)
+    const tokens = command.split(/\s+/).filter(Boolean);
+    const cmd = tokens[0];
+    const cmdArgs = tokens.slice(1);
 
     try {
       const result = await runCli({
-        command: "sh",
-        args: ["-c", command],
+        command: cmd,
+        args: cmdArgs,
         timeout: SHELL_TIMEOUT,
         cwd: baseDir,
         maxBuffer: MAX_SHELL_OUTPUT,
