@@ -149,7 +149,7 @@ export async function dispatch(
 
 export function createServer(deps: ServerDependencies): Server {
   const server = new Server(
-    { name: "agestra", version: "4.1.0" },
+    { name: "agestra", version: "4.1.1" },
     { capabilities: { tools: {} } },
   );
 
