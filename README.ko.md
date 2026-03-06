@@ -7,7 +7,7 @@
 
 [English](README.md) | [한국어](README.ko.md)
 
-Agestra는 Ollama(로컬), Gemini CLI, Codex CLI를 Claude Code에 플러그형으로 연결합니다. 멀티에이전트 토론, 병렬 작업 분배, 교차 검증, 지속적 GraphRAG 메모리 시스템을 39개 MCP 도구로 제공합니다.
+Agestra는 Ollama(로컬), Gemini CLI, Codex CLI를 Claude Code에 플러그형으로 연결합니다. 멀티에이전트 토론, 병렬 작업 분배, 교차 검증, 지속적 GraphRAG 메모리 시스템을 43개 MCP 도구로 제공합니다.
 
 ## 빠른 시작
 
@@ -70,7 +70,7 @@ Turborepo 모노레포, 8개 패키지:
 | `@agestra/agents` | 토론 엔진, 작업 분배기, 교차 검증기, 작업 체인, 자동 QA, 파일 변경 추적기, 세션 관리자 |
 | `@agestra/workspace` | 코드 리뷰 워크플로우용 문서 관리자 |
 | `@agestra/memory` | GraphRAG — FTS5 + 벡터 + 지식 그래프 하이브리드 검색, 실패 추적 |
-| `@agestra/mcp-server` | MCP 프로토콜 레이어, 39개 도구, 디스패치 |
+| `@agestra/mcp-server` | MCP 프로토콜 레이어, 43개 도구, 디스패치 |
 
 ### 설계 원칙
 
@@ -83,7 +83,7 @@ Turborepo 모노레포, 8개 패키지:
 
 ---
 
-## 도구 (39개)
+## 도구 (43개)
 
 ### AI 채팅 (3개)
 
@@ -93,7 +93,7 @@ Turborepo 모노레포, 8개 패키지:
 | `ai_analyze_files` | 파일을 디스크에서 읽어 공급자에게 질문과 함께 전송 |
 | `ai_compare` | 같은 프롬프트를 여러 공급자에 보내 응답 비교 |
 
-### 에이전트 오케스트레이션 (16개)
+### 에이전트 오케스트레이션 (19개)
 
 | 도구 | 설명 |
 |------|------|
@@ -109,12 +109,15 @@ Turborepo 모노레포, 8개 패키지:
 | `agent_cross_validate` | 출력 교차 검증 (에이전트 등급 검증자만 가능) |
 | `agent_task_chain_create` | 의존성과 체크포인트가 있는 다단계 작업 체인 생성 |
 | `agent_task_chain_step` | 체인의 다음 (또는 지정) 단계 실행 |
+| `agent_task_chain_step_async` | 단계를 비동기로 실행 (논블로킹) |
+| `agent_task_chain_await` | 비동기 단계 완료 대기 |
 | `agent_task_chain_status` | 체인 진행 상태 및 단계 결과 확인 |
 | `agent_changes_review` | 격리된 작업의 파일 변경 리뷰 |
 | `agent_changes_accept` | 격리된 작업의 변경 수락 및 병합 |
 | `agent_changes_reject` | 변경 거부 및 격리 워크트리 정리 |
+| `session_list` | 에이전트 세션 목록 조회 (유형/상태 필터링) |
 
-### 워크스페이스 (5개)
+### 워크스페이스 (6개)
 
 | 도구 | 설명 |
 |------|------|
@@ -123,6 +126,7 @@ Turborepo 모노레포, 8개 패키지:
 | `workspace_review_status` | 리뷰 완료 상태 확인 |
 | `workspace_add_comment` | 리뷰에 코멘트 추가 |
 | `workspace_read` | 리뷰 내용 읽기 |
+| `workspace_list` | 워크스페이스의 모든 리뷰 문서 목록 조회 |
 
 ### 공급자 관리 (2개)
 
@@ -218,12 +222,12 @@ agestra/
 │   ├── idea.md              # /agestra idea — 개선점 발굴
 │   └── design.md            # /agestra design — 아키텍처 탐색
 ├── agents/
-│   ├── reviewer.md          # 엄격한 품질 검증자 (Opus)
-│   ├── designer.md          # 아키텍처 탐색자 (Opus)
-│   ├── ideator.md           # 개선점 발굴자 (Sonnet)
-│   ├── moderator.md         # 토론 진행자 (Sonnet)
-│   ├── qa.md                # QA 검증자 (프로젝트 내부)
-│   └── team-lead.md         # 작업 오케스트레이터 (프로젝트 내부)
+│   ├── agestra-reviewer.md  # 엄격한 품질 검증자 (Opus)
+│   ├── agestra-designer.md  # 아키텍처 탐색자 (Opus)
+│   ├── agestra-ideator.md   # 개선점 발굴자 (Sonnet)
+│   ├── agestra-moderator.md # 토론 진행자 (Sonnet)
+│   ├── agestra-qa.md        # QA 검증자 (Opus, 코드 쓰기 불가)
+│   └── agestra-team-lead.md # 작업 오케스트레이터 (Sonnet, 코드 쓰기 불가)
 ├── skills/
 │   └── provider-guide.md    # 공급자 사용 가이드라인 (skill)
 ├── hooks/
@@ -240,7 +244,7 @@ agestra/
 │   ├── agents/              # 토론 엔진, 분배기, 교차 검증기
 │   ├── workspace/           # 코드 리뷰 문서 관리자
 │   ├── memory/              # GraphRAG: 하이브리드 검색, 실패 추적
-│   └── mcp-server/          # MCP 서버, 39개 도구, 디스패치
+│   └── mcp-server/          # MCP 서버, 43개 도구, 디스패치
 ├── package.json             # 워크스페이스 루트
 └── turbo.json               # Turborepo 파이프라인
 ```

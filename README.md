@@ -7,7 +7,7 @@
 
 [English](README.md) | [한국어](README.ko.md)
 
-Agestra connects Ollama (local), Gemini CLI, and Codex CLI to Claude Code as pluggable providers, enabling multi-agent debates, parallel task dispatch, cross-validation, and a persistent GraphRAG memory system — all through 39 MCP tools.
+Agestra connects Ollama (local), Gemini CLI, and Codex CLI to Claude Code as pluggable providers, enabling multi-agent debates, parallel task dispatch, cross-validation, and a persistent GraphRAG memory system — all through 43 MCP tools.
 
 ## Quick Start
 
@@ -70,7 +70,7 @@ Turborepo monorepo with 8 packages:
 | `@agestra/agents` | Debate engine, task dispatcher, cross-validator, task chain, auto-QA, file change tracker, session manager |
 | `@agestra/workspace` | Document manager for code review workflows |
 | `@agestra/memory` | GraphRAG — FTS5 + vector + knowledge graph hybrid search, dead-end tracking |
-| `@agestra/mcp-server` | MCP protocol layer, 39 tools, dispatch |
+| `@agestra/mcp-server` | MCP protocol layer, 43 tools, dispatch |
 
 ### Design Principles
 
@@ -83,7 +83,7 @@ Turborepo monorepo with 8 packages:
 
 ---
 
-## Tools (39)
+## Tools (43)
 
 ### AI Chat (3)
 
@@ -93,7 +93,7 @@ Turborepo monorepo with 8 packages:
 | `ai_analyze_files` | Read files from disk and send contents with a question to a provider |
 | `ai_compare` | Send the same prompt to multiple providers, compare responses |
 
-### Agent Orchestration (16)
+### Agent Orchestration (19)
 
 | Tool | Description |
 |------|-------------|
@@ -109,12 +109,15 @@ Turborepo monorepo with 8 packages:
 | `agent_cross_validate` | Cross-validate outputs (agent-tier validators only) |
 | `agent_task_chain_create` | Create a multi-step task chain with dependencies and checkpoints |
 | `agent_task_chain_step` | Execute the next (or specified) step in a chain |
+| `agent_task_chain_step_async` | Execute a step asynchronously (non-blocking) |
+| `agent_task_chain_await` | Wait for an async step to complete |
 | `agent_task_chain_status` | Check chain progress and step results |
 | `agent_changes_review` | Review file changes from an isolated task |
 | `agent_changes_accept` | Accept and merge changes from an isolated task |
 | `agent_changes_reject` | Reject changes and clean up the isolated worktree |
+| `session_list` | List all agent sessions with optional type/status filtering |
 
-### Workspace (5)
+### Workspace (6)
 
 | Tool | Description |
 |------|-------------|
@@ -123,6 +126,7 @@ Turborepo monorepo with 8 packages:
 | `workspace_review_status` | Check review completion status |
 | `workspace_add_comment` | Add a comment to a review |
 | `workspace_read` | Read review contents |
+| `workspace_list` | List all review documents in the workspace |
 
 ### Provider Management (2)
 
@@ -218,12 +222,12 @@ agestra/
 │   ├── idea.md              # /agestra idea — improvement discovery
 │   └── design.md            # /agestra design — architecture exploration
 ├── agents/
-│   ├── reviewer.md          # Strict quality verifier (Opus)
-│   ├── designer.md          # Architecture explorer (Opus)
-│   ├── ideator.md           # Improvement discoverer (Sonnet)
-│   ├── moderator.md         # Debate facilitator (Sonnet)
-│   ├── qa.md                # QA verifier (project-internal)
-│   └── team-lead.md         # Task orchestrator (project-internal)
+│   ├── agestra-reviewer.md  # Strict quality verifier (Opus)
+│   ├── agestra-designer.md  # Architecture explorer (Opus)
+│   ├── agestra-ideator.md   # Improvement discoverer (Sonnet)
+│   ├── agestra-moderator.md # Debate facilitator (Sonnet)
+│   ├── agestra-qa.md        # QA verifier (Opus, no code writes)
+│   └── agestra-team-lead.md # Task orchestrator (Sonnet, no code writes)
 ├── skills/
 │   └── provider-guide.md    # Provider usage guidelines (skill)
 ├── hooks/
@@ -240,7 +244,7 @@ agestra/
 │   ├── agents/              # Debate engine, dispatcher, cross-validator
 │   ├── workspace/           # Code review document manager
 │   ├── memory/              # GraphRAG: hybrid search, dead-end tracking
-│   └── mcp-server/          # MCP server, 39 tools, dispatch
+│   └── mcp-server/          # MCP server, 43 tools, dispatch
 ├── package.json             # Workspace root
 └── turbo.json               # Turborepo pipeline
 ```
