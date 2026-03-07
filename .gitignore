@@ -10,8 +10,14 @@
 # Build Artifacts & Distribution
 # ===========================================
 build/
-dist/
 packages/*/dist/
+
+# Root dist — tracked for plugin distribution, built by CI
+# Use "git add -f dist/" if committing locally
+dist/*
+!dist/bundle.js
+!dist/sql-wasm.js
+!dist/sql-wasm.wasm
 *.egg-info/
 *.egg
 
