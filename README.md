@@ -7,7 +7,7 @@
 
 [English](README.md) | [한국어](README.ko.md)
 
-Agestra connects Ollama (local), Gemini CLI, and Codex CLI to Claude Code as pluggable providers, enabling multi-agent debates, parallel task dispatch, cross-validation, and a persistent GraphRAG memory system — all through 43 MCP tools.
+Agestra connects Ollama (local), Gemini CLI, and Codex CLI to Claude Code as pluggable providers, enabling multi-agent orchestration with independent aggregation, consensus debates, autonomous CLI workers, parallel task dispatch, cross-validation, and a persistent GraphRAG memory system — all through 48 MCP tools.
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ In Claude Code, run:
 /plugin install agestra@agestra
 ```
 
-That's it. Agestra auto-detects available providers (Ollama, Gemini CLI, Codex CLI) on first use.
+That's it. Agestra auto-detects available providers (Ollama, Gemini CLI, Codex CLI) on first use via `environment_check`.
 
 ### Prerequisites
 
@@ -29,6 +29,9 @@ At least one AI provider must be installed:
 | [Ollama](https://ollama.com/) | `curl -fsSL https://ollama.com/install.sh \| sh` | Local LLM |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm install -g @google/gemini-cli` | Cloud |
 | [Codex CLI](https://github.com/openai/codex) | `npm install -g @openai/codex` | Cloud |
+
+Optional but recommended:
+- **tmux** — enables visible CLI worker panes during autonomous execution
 
 ---
 
@@ -44,16 +47,34 @@ At least one AI provider must be installed:
 | `/agestra idea [topic]` | Discover improvements by comparing with similar projects |
 | `/agestra design [subject]` | Explore architecture and design trade-offs before implementation |
 
-Each command presents a choice: **Claude only**, **Compare** (multiple AIs side-by-side), **Debate** (structured multi-AI discussion), or **Other** (user-specified).
+Each command presents a choice:
+
+| Mode | Description |
+|------|-------------|
+| **Claude only** | Plugin specialist agent works alone |
+| **각자 독립** (Independent) | Each AI works independently, moderator aggregates into unified document |
+| **끝장토론** (Debate) | Independent work + document review rounds until all AIs agree |
 
 ## Agents
 
 | Agent | Model | Role |
 |-------|-------|------|
+| `agestra-team-lead` | Sonnet | Full orchestrator — environment check, work mode selection, CLI worker supervision, QA loop |
 | `agestra-reviewer` | Opus | Strict quality verifier — security, orphans, spec drift, test gaps |
 | `agestra-designer` | Opus | Architecture explorer — Socratic questioning, trade-off analysis |
 | `agestra-ideator` | Sonnet | Improvement discoverer — web research, competitive analysis |
-| `agestra-moderator` | Sonnet | Debate facilitator — neutral, manages turns, judges consensus |
+| `agestra-moderator` | Sonnet | Multi-mode facilitator — debate, independent aggregation, document review, conflict resolution |
+| `agestra-qa` | Opus | QA verifier — design compliance, PASS/FAIL judgment |
+
+## Skills
+
+| Skill | Description |
+|-------|-------------|
+| `provider-guide` | Provider routing, mode reference, orchestration pipeline |
+| `worker-manage` | List, check, collect, and stop CLI workers |
+| `cancel` | Graceful stop for workers, debates, chains, tasks |
+| `build-fix` | Auto-diagnose and fix build/typecheck/lint errors |
+| `trace` | View agent execution timeline and flow diagrams |
 
 ---
 
@@ -63,14 +84,14 @@ Turborepo monorepo with 8 packages:
 
 | Package | Description |
 |---------|-------------|
-| `@agestra/core` | `AIProvider` interface, registry, config loader, CLI runner, atomic writes, job queue |
+| `@agestra/core` | `AIProvider` interface, registry, config loader, CLI runner, atomic writes, job queue, secret scanner, worktree manager, task manifest, CLI worker manager |
 | `@agestra/provider-ollama` | Ollama HTTP adapter with model detection |
 | `@agestra/provider-gemini` | Google Gemini CLI adapter |
 | `@agestra/provider-codex` | OpenAI Codex CLI adapter |
 | `@agestra/agents` | Debate engine, task dispatcher, cross-validator, task chain, auto-QA, file change tracker, session manager |
 | `@agestra/workspace` | Document manager for code review workflows |
 | `@agestra/memory` | GraphRAG — FTS5 + vector + knowledge graph hybrid search, dead-end tracking |
-| `@agestra/mcp-server` | MCP protocol layer, 43 tools, dispatch |
+| `@agestra/mcp-server` | MCP protocol layer, 48 tools, dispatch |
 
 ### Design Principles
 
@@ -80,10 +101,19 @@ Turborepo monorepo with 8 packages:
 - **Modular dispatch** — Each tool category is an independent module with `getTools()` + `handleTool()`. The server collects and dispatches dynamically.
 - **Atomic writes** — All file operations use write-to-temp-then-rename to prevent corruption.
 - **Dead-end tracking** — Failed approaches are recorded in GraphRAG and injected into future prompts.
+- **Preflight security** — CLI worker spawning includes secret scanning and array-based process args to prevent injection.
+
+### Work Modes
+
+**Text work** (review, design, idea): Claude only → 각자 독립 → 끝장토론
+
+**Implementation work** (team-lead orchestration):
+- **Claude만으로** — Claude implements directly with project/global agents.
+- **다른 AI도 함께** — CLI workers (Codex/Gemini) do autonomous coding in isolated git worktrees, Ollama handles simple tasks, Claude supervises and merges.
 
 ---
 
-## Tools (43)
+## Tools (48)
 
 ### AI Chat (3)
 
@@ -117,6 +147,21 @@ Turborepo monorepo with 8 packages:
 | `agent_changes_reject` | Reject changes and clean up the isolated worktree |
 | `session_list` | List all agent sessions with optional type/status filtering |
 
+### CLI Workers (4)
+
+| Tool | Description |
+|------|-------------|
+| `cli_worker_spawn` | Spawn a CLI AI (Codex/Gemini) in autonomous mode with git worktree isolation and preflight security |
+| `cli_worker_status` | Check worker FSM state, heartbeat, and output tail |
+| `cli_worker_collect` | Collect completed worker results (git diff, output, exit code) |
+| `cli_worker_stop` | Stop a running worker (SIGTERM → SIGKILL) and clean up worktree |
+
+### Environment (1)
+
+| Tool | Description |
+|------|-------------|
+| `environment_check` | Detect CLI tools, Ollama models with tiers, tmux, git worktree support, available modes |
+
 ### Workspace (6)
 
 | Tool | Description |
@@ -139,7 +184,7 @@ Turborepo monorepo with 8 packages:
 
 | Tool | Description |
 |------|-------------|
-| `ollama_models` | List installed models with sizes |
+| `ollama_models` | List installed models with sizes and tier classification |
 | `ollama_pull` | Download a model |
 
 ### Memory (6)
@@ -194,6 +239,8 @@ Stored under `.agestra/` (gitignored):
 | `.agestra/workspace/` | Code review documents |
 | `.agestra/memory.db` | GraphRAG SQLite database |
 | `.agestra/.jobs/` | Background job queue |
+| `.agestra/.workers/` | CLI worker state, manifests, and output logs |
+| `.agestra/worktrees/` | Git worktrees for isolated CLI worker execution |
 | `.agestra/traces/` | Provider trace JSONL (auto-pruned after 30 days) |
 
 ---
@@ -225,11 +272,15 @@ agestra/
 │   ├── agestra-reviewer.md  # Strict quality verifier (Opus)
 │   ├── agestra-designer.md  # Architecture explorer (Opus)
 │   ├── agestra-ideator.md   # Improvement discoverer (Sonnet)
-│   ├── agestra-moderator.md # Debate facilitator (Sonnet)
+│   ├── agestra-moderator.md # Multi-mode facilitator (Sonnet)
 │   ├── agestra-qa.md        # QA verifier (Opus, no code writes)
-│   └── agestra-team-lead.md # Task orchestrator (Sonnet, no code writes)
+│   └── agestra-team-lead.md # Full orchestrator (Sonnet, no code writes)
 ├── skills/
-│   └── provider-guide.md    # Provider usage guidelines (skill)
+│   ├── provider-guide.md    # Provider routing and mode reference
+│   ├── worker-manage.md     # CLI worker management
+│   ├── cancel.md            # Graceful operation cancellation
+│   ├── build-fix.md         # Build error auto-repair
+│   └── trace.md             # Execution timeline viewer
 ├── hooks/
 │   └── user-prompt-submit.md  # Tool recommendation hook
 ├── dist/
@@ -237,14 +288,14 @@ agestra/
 ├── scripts/
 │   └── bundle.mjs           # esbuild bundle script
 ├── packages/
-│   ├── core/                # AIProvider interface, registry
+│   ├── core/                # AIProvider interface, registry, security, workers
 │   ├── provider-ollama/     # Ollama HTTP adapter
 │   ├── provider-gemini/     # Gemini CLI adapter
 │   ├── provider-codex/      # Codex CLI adapter
 │   ├── agents/              # Debate engine, dispatcher, cross-validator
 │   ├── workspace/           # Code review document manager
 │   ├── memory/              # GraphRAG: hybrid search, dead-end tracking
-│   └── mcp-server/          # MCP server, 43 tools, dispatch
+│   └── mcp-server/          # MCP server, 48 tools, dispatch
 ├── package.json             # Workspace root
 └── turbo.json               # Turborepo pipeline
 ```
