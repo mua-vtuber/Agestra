@@ -7,10 +7,11 @@
  */
 
 /** Project version. Replaced by build script with package.json version. */
+declare const __PROJECT_VERSION__: string | undefined;
 export const PROJECT_VERSION: string =
-  "__PROJECT_VERSION__" === "__PROJECT_" + "VERSION__"
-    ? "0.0.0-dev"
-    : "__PROJECT_VERSION__";
+  typeof __PROJECT_VERSION__ !== "undefined"
+    ? __PROJECT_VERSION__
+    : "0.0.0-dev";
 
 /** Default Ollama host URL. */
 export const DEFAULT_OLLAMA_HOST = "http://localhost:11434";

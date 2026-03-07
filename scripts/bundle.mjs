@@ -70,7 +70,7 @@ async function main() {
     plugins: [sqlWasmExternalPlugin],
     // Inject PROJECT_VERSION from package.json at build time
     define: {
-      '"__PROJECT_VERSION__"': JSON.stringify(pkg.version),
+      __PROJECT_VERSION__: JSON.stringify(pkg.version),
     },
     // Let esbuild resolve workspace packages via tsconfig paths
     // Node built-ins are automatically external for platform: "node"

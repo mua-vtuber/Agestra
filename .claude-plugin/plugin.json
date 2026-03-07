@@ -1,11 +1,13 @@
 {
   "name": "agestra",
-  "version": "4.1.1",
+  "version": "4.2.1",
   "description": "Claude Code plugin — orchestrate Ollama, Gemini, and Codex for multi-AI debates, cross-validation, and GraphRAG memory",
   "mcpServers": {
     "agestra": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/bundle.js"]
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/dist/bundle.js"
+      ]
     }
   }
 }
